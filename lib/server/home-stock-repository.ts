@@ -5,14 +5,10 @@ import {
   recipeIngredients,
   recipes as recipeTable,
   shoppingListItems,
-  userPreferences,
 } from "../../db/schema";
 import {
   InventoryItem,
   Recipe,
-  recipes as seedRecipes,
-  seedInventory,
-  seedShopping,
   ShoppingListItem,
 } from "../homestock";
 
@@ -69,69 +65,10 @@ function mapShopping(row: typeof shoppingListItems.$inferSelect): ShoppingListIt
   };
 }
 
-async function seedIfEmpty() {
-  const db = getDb();
-  const existingInventory = await db.select({ id: inventoryItems.id }).from(inventoryItems).limit(1);
-  if (existingInventory.length === 0) {
-    await db.insert(inventoryItems).values(seedInventory.map((item) => ({
-      id: item.id,
-      name: item.name,
-      category: item.category,
-      location: item.location,
-      quantity: item.quantity,
-      unit: item.unit,
-      expiry: item.expiry ?? null,
-      purchaseDate: item.purchaseDate ?? null,
-      notes: item.notes ?? null,
-      basic: item.basic,
-      createdAt: now(),
-    })));
-  }
-
-  const existingShopping = await db.select({ id: shoppingListItems.id }).from(shoppingListItems).limit(1);
-  if (existingShopping.length === 0) {
-    await db.insert(shoppingListItems).values(seedShopping.map((item) => ({
-      id: item.id,
-      name: item.name,
-      quantity: item.quantity,
-      category: item.category,
-      checked: item.checked,
-      note: item.note ?? null,
-      source: item.source,
-      createdAt: now(),
-    })));
-  }
-
-  const existingRecipes = await db.select({ id: recipeTable.id }).from(recipeTable).limit(1);
-  if (existingRecipes.length === 0) {
-    await db.insert(recipeTable).values(seedRecipes.map((recipe) => ({
-      id: recipe.id,
-      name: recipe.name,
-      description: recipe.description,
-      time: recipe.time,
-      difficulty: recipe.difficulty,
-      tags: JSON.stringify(recipe.tags),
-      steps: JSON.stringify(recipe.steps),
-      createdAt: now(),
-    })));
-    await db.insert(recipeIngredients).values(seedRecipes.flatMap((recipe) => recipe.ingredients.map((ingredientName, sortOrder) => ({
-      id: `${recipe.id}-${sortOrder}`,
-      recipeId: recipe.id,
-      ingredientName,
-      sortOrder,
-    }))));
-  }
-
-  const existingPreferences = await db.select({ id: userPreferences.id }).from(userPreferences).limit(1);
-  if (existingPreferences.length === 0) {
-    await db.insert(userPreferences).values({ id: "default", workspaceName: "Marton's home", createdAt: now() });
-  }
-}
-
 export async function ensureDatabase() {
   if (!initialization) {
     const client = getSqlClient();
-    initialization = client.batch(schemaStatements).then(() => seedIfEmpty());
+    initialization = client.batch(schemaStatements).then(() => undefined);
   }
   await initialization;
 }
@@ -258,17 +195,5 @@ export async function toggleShoppingItem(id: string) {
 export async function deleteShoppingItem(id: string) {
   await ensureDatabase();
   await getDb().delete(shoppingListItems).where(eq(shoppingListItems.id, id));
-  return getSnapshot();
-}
-
-export async function resetDemoData() {
-  await ensureDatabase();
-  const db = getDb();
-  await db.delete(inventoryItems);
-  await db.delete(shoppingListItems);
-  await db.delete(recipeIngredients);
-  await db.delete(recipeTable);
-  initialization = undefined;
-  await seedIfEmpty();
   return getSnapshot();
 }

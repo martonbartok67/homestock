@@ -7,7 +7,6 @@ import {
   deleteShoppingItem,
   finishInventoryItem,
   getSnapshot,
-  resetDemoData,
   toggleShoppingItem,
 } from "../../../lib/server/home-stock-repository";
 
@@ -37,7 +36,6 @@ export async function POST(request: Request) {
       case "addShoppingBatch": snapshot = await addShoppingItems((body.items ?? []) as never); break;
       case "toggleShopping": snapshot = await toggleShoppingItem(String(body.id)); break;
       case "deleteShopping": snapshot = await deleteShoppingItem(String(body.id)); break;
-      case "resetDemo": snapshot = await resetDemoData(); break;
       default: return NextResponse.json({ error: "Unknown HomeStock action." }, { status: 400 });
     }
     return NextResponse.json(snapshot);

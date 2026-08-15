@@ -10,7 +10,7 @@ copy .env.example .env.local
 npm run dev
 ```
 
-Set `TURSO_AUTH_TOKEN` in `.env.local` before using durable data. The first database request creates the tables and seeds the sample inventory, shopping list, recipes, and preferences.
+Set `TURSO_AUTH_TOKEN` in `.env.local` before using durable data. The first database request creates the tables; your workspace starts empty until you add your own inventory and shopping data.
 
 ## Database
 
