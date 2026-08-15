@@ -80,18 +80,47 @@ export default function Home() {
   const [recipeMode, setRecipeMode] = useState<RecipeMode>("use-soon");
   const [activeRecipe, setActiveRecipe] = useState<Recipe | null>(null);
   const [toast, setToast] = useState("");
+  const [recipeList, setRecipeList] = useState<Recipe[]>(recipes);
+  const [databaseState, setDatabaseState] = useState<"checking" | "connected" | "offline">("checking");
+
+  const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(""), 2600); };
+
+  const apiAction = async (action: string, payload: Record<string, unknown> = {}) => {
+    try {
+      const response = await fetch("/api/home-stock", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, ...payload }),
+      });
+      const snapshot = await response.json() as { inventory: InventoryItem[]; shopping: ShoppingListItem[]; recipes: Recipe[]; error?: string };
+      if (!response.ok) throw new Error(snapshot.error ?? "Database request failed.");
+      setInventory(snapshot.inventory);
+      setShopping(snapshot.shopping);
+      if (snapshot.recipes.length > 0) setRecipeList(snapshot.recipes);
+      setDatabaseState("connected");
+      return true;
+    } catch {
+      setDatabaseState("offline");
+      notify("Connect Turso to save changes across devices");
+      return false;
+    }
+  };
 
   useEffect(() => {
-    try {
-      const storedInventory = window.localStorage.getItem("homestock-inventory");
-      const storedShopping = window.localStorage.getItem("homestock-shopping");
-      if (storedInventory) window.setTimeout(() => setInventory(JSON.parse(storedInventory)), 0);
-      if (storedShopping) window.setTimeout(() => setShopping(JSON.parse(storedShopping)), 0);
-    } catch { /* demo state remains available if storage is blocked */ }
+    let active = true;
+    void fetch("/api/home-stock")
+      .then(async (response) => {
+        const snapshot = await response.json() as { inventory: InventoryItem[]; shopping: ShoppingListItem[]; recipes: Recipe[] };
+        if (!response.ok) throw new Error("Database unavailable");
+        if (!active) return;
+        setInventory(snapshot.inventory);
+        setShopping(snapshot.shopping);
+        if (snapshot.recipes.length > 0) setRecipeList(snapshot.recipes);
+        setDatabaseState("connected");
+      })
+      .catch(() => { if (active) setDatabaseState("offline"); });
+    return () => { active = false; };
   }, []);
-
-  useEffect(() => { window.localStorage.setItem("homestock-inventory", JSON.stringify(inventory)); }, [inventory]);
-  useEffect(() => { window.localStorage.setItem("homestock-shopping", JSON.stringify(shopping)); }, [shopping]);
 
   const expiring = useMemo(() => inventory.filter((item) => ["expired", "urgent", "warning"].includes(getExpiryStatus(item.expiry))).sort((a, b) => (a.expiry ?? "9999").localeCompare(b.expiry ?? "9999")), [inventory]);
   const basics = inventory.filter((item) => item.basic && item.quantity <= 2);
@@ -101,34 +130,38 @@ export default function Home() {
     return matchesQuery && matchesCategory;
   });
 
-  const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(""), 2600); };
-
   const finishItem = (item: InventoryItem) => {
     setInventory((current) => current.filter((entry) => entry.id !== item.id));
     if (item.basic && !shopping.some((entry) => entry.name.toLowerCase() === item.name.toLowerCase() && !entry.checked)) {
       setShopping((current) => [{ id: makeId("shop"), name: item.name, quantity: `${item.quantity} ${item.unit}`, category: item.category, checked: false, source: "inventory" }, ...current]);
       notify(`${item.name} finished · added to shopping list`);
     } else notify(`${item.name} marked as finished`);
+    void apiAction("finishInventory", { id: item.id });
   };
 
-  const deleteItem = (id: string) => setInventory((current) => current.filter((item) => item.id !== id));
-  const toggleShopping = (id: string) => setShopping((current) => current.map((item) => item.id === id ? { ...item, checked: !item.checked } : item));
-  const removeShopping = (id: string) => setShopping((current) => current.filter((item) => item.id !== id));
+  const deleteItem = (id: string) => { setInventory((current) => current.filter((item) => item.id !== id)); void apiAction("deleteInventory", { id }); };
+  const toggleShopping = (id: string) => { setShopping((current) => current.map((item) => item.id === id ? { ...item, checked: !item.checked } : item)); void apiAction("toggleShopping", { id }); };
+  const removeShopping = (id: string) => { setShopping((current) => current.filter((item) => item.id !== id)); void apiAction("deleteShopping", { id }); };
   const addShopping = (name: string, category: Category = "Pantry", source: ShoppingListItem["source"] = "manual") => {
     if (!name.trim()) return;
-    setShopping((current) => [{ id: makeId("shop"), name: name.trim(), quantity: "1", category, checked: false, source }, ...current]);
+    const item = { name: name.trim(), quantity: "1", category, source };
+    setShopping((current) => [{ id: makeId("shop"), ...item, checked: false }, ...current]);
+    void apiAction("addShopping", { item });
     notify(`${name.trim()} added to shopping list`);
   };
 
   const addMissing = (recipe: Recipe) => {
     const missing = missingIngredients(recipe, inventory);
-    setShopping((current) => [...missing.filter((name) => !current.some((item) => item.name.toLowerCase() === name.toLowerCase() && !item.checked)).map((name) => ({ id: makeId("recipe"), name, quantity: "1", category: "Pantry" as Category, checked: false, source: "recipe" as const })), ...current]);
+    const items = missing.filter((name) => !shopping.some((item) => item.name.toLowerCase() === name.toLowerCase() && !item.checked)).map((name) => ({ name, quantity: "1", category: "Pantry" as Category, source: "recipe" as const }));
+    setShopping((current) => [...items.map((item) => ({ id: makeId("recipe"), ...item, checked: false })), ...current]);
+    void apiAction("addShoppingBatch", { items });
     notify(`${missing.length} missing ingredient${missing.length === 1 ? "" : "s"} added`);
   };
 
   const addInventoryItem = (item: Omit<InventoryItem, "id">) => {
     setInventory((current) => [{ ...item, id: makeId("item") }, ...current]);
     setShowAdd(false);
+    void apiAction("addInventory", { item });
     notify(`${item.name} added to inventory`);
   };
 
@@ -136,8 +169,8 @@ export default function Home() {
     if (view === "inventory") return <InventoryView inventory={filteredInventory} query={query} setQuery={setQuery} categoryFilter={categoryFilter} setCategoryFilter={setCategoryFilter} onAdd={() => setShowAdd(true)} onFinish={finishItem} onDelete={deleteItem} />;
     if (view === "expiring") return <ExpiringView items={expiring} onFinish={finishItem} onDelete={deleteItem} onAdd={() => setShowAdd(true)} />;
     if (view === "shopping") return <ShoppingView shopping={shopping} onToggle={toggleShopping} onRemove={removeShopping} onAdd={(name) => addShopping(name)} />;
-    if (view === "recipes") return <RecipesView mode={recipeMode} setMode={setRecipeMode} recipes={recipes} inventory={inventory} onOpen={setActiveRecipe} onAddMissing={addMissing} />;
-    if (view === "settings") return <SettingsView inventory={inventory} shopping={shopping} onReset={() => { setInventory(seedInventory); setShopping(seedShopping); notify("Demo data restored"); }} />;
+    if (view === "recipes") return <RecipesView mode={recipeMode} setMode={setRecipeMode} recipes={recipeList} inventory={inventory} onOpen={setActiveRecipe} onAddMissing={addMissing} />;
+    if (view === "settings") return <SettingsView inventory={inventory} shopping={shopping} onReset={() => { void apiAction("resetDemo"); notify("Demo data restored"); }} />;
     return <Dashboard inventory={inventory} expiring={expiring} basics={basics} shopping={shopping} onAdd={() => setShowAdd(true)} onView={setView} onFinish={finishItem} onDelete={deleteItem} onRecipe={() => setView("recipes")} onAddShopping={(item) => addShopping(item.name, item.category, "inventory")} />;
   };
 
@@ -148,7 +181,7 @@ export default function Home() {
       <nav className="side-nav" aria-label="Primary navigation">
         {navItems.map((item) => <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => setView(item.id)}><span className="nav-icon">{item.icon}</span>{item.label}{item.id === "expiring" && expiring.length > 0 && <span className="nav-count">{expiring.length}</span>}</button>)}
       </nav>
-      <div className="sidebar-bottom"><button className={view === "settings" ? "active" : ""} onClick={() => setView("settings")}><span className="nav-icon">⚙</span>Settings</button><div className="storage-card"><span className="storage-orb" /><div><strong>Local workspace</strong><span>Saved on this device</span></div></div></div>
+      <div className="sidebar-bottom"><button className={view === "settings" ? "active" : ""} onClick={() => setView("settings")}><span className="nav-icon">⚙</span>Settings</button><div className="storage-card"><span className={`storage-orb ${databaseState}`} /><div><strong>{databaseState === "connected" ? "Turso workspace" : databaseState === "checking" ? "Connecting..." : "Demo mode"}</strong><span>{databaseState === "connected" ? "Synced to database" : "Needs database setup"}</span></div></div></div>
     </aside>
     <section className="content-shell">
       <header className="topbar"><div className="breadcrumb"><span>Home</span><span className="slash">/</span><strong>{navItems.find((item) => item.id === view)?.label ?? "Settings"}</strong></div><div className="topbar-actions"><button className="quick-add" onClick={() => setShowAdd(true)}><span>＋</span> Add item</button><button className="avatar-button" aria-label="Open profile menu" onClick={() => setShowProfileMenu((current) => !current)}>MB</button>{showProfileMenu && <div className="profile-menu"><strong>Marton&apos;s home</strong><span>Local demo workspace</span><button onClick={() => setView("settings")}>Workspace settings →</button></div>}</div></header>
@@ -186,7 +219,7 @@ function ShoppingRow({ item, onToggle, onRemove }: { item: ShoppingListItem; onT
 function RecipesView({ mode, setMode, recipes: recipeList, inventory, onOpen, onAddMissing }: { mode: RecipeMode; setMode: (mode: RecipeMode) => void; recipes: Recipe[]; inventory: InventoryItem[]; onOpen: (recipe: Recipe) => void; onAddMissing: (recipe: Recipe) => void }) { const sorted = [...recipeList].sort((a, b) => { const aMissing = missingIngredients(a, inventory).length; const bMissing = missingIngredients(b, inventory).length; if (mode === "minimal-shopping") return aMissing - bMissing; if (mode === "use-soon") return matchingIngredients(b, inventory).length - matchingIngredients(a, inventory).length; return matchingIngredients(b, inventory).length - matchingIngredients(a, inventory).length; }); return <div className="list-view recipe-view"><div className="page-intro"><div><div className="eyebrow">Good food, less guesswork</div><h1>Recipes</h1><p>Ideas built around what&apos;s already waiting in your kitchen.</p></div><span className="recipe-badge">✦ Rule-based for now</span></div><div className="mode-tabs">{([["use-soon", "Cook with expiring items"], ["use-what-i-have", "Use what I have"], ["minimal-shopping", "Minimal shopping"]] as [RecipeMode, string][]).map(([id, label]) => <button key={id} className={mode === id ? "active" : ""} onClick={() => setMode(id)}>{label}</button>)}</div><div className="recipe-grid">{sorted.map((recipe) => <RecipeCard key={recipe.id} recipe={recipe} inventory={inventory} onOpen={() => onOpen(recipe)} onAddMissing={() => onAddMissing(recipe)} />)}</div></div>; }
 function RecipeCard({ recipe, inventory, onOpen, onAddMissing }: { recipe: Recipe; inventory: InventoryItem[]; onOpen: () => void; onAddMissing: () => void }) { const matching = matchingIngredients(recipe, inventory); const missing = missingIngredients(recipe, inventory); return <article className="recipe-card"><div className="recipe-card-top"><div className="recipe-symbol">✦</div><div><div className="recipe-tags">{recipe.tags.map((tag) => <span key={tag}>{tag}</span>)}</div><h2>{recipe.name}</h2><p>{recipe.description}</p></div></div><div className="ingredient-summary"><div><span className="ingredient-label">You have</span><strong>{matching.length} / {recipe.ingredients.length} ingredients</strong></div><div className="ingredient-bar"><span style={{ width: `${(matching.length / recipe.ingredients.length) * 100}%` }} /></div></div><div className="recipe-card-meta"><span>◷ {recipe.time}</span><span>⌁ {recipe.difficulty}</span><span>{missing.length ? `${missing.length} to buy` : "Ready to cook"}</span></div><div className="recipe-card-actions"><button className="secondary-button" onClick={onOpen}>View recipe</button>{missing.length > 0 && <button className="text-button" onClick={onAddMissing}>＋ Add missing</button>}</div></article>; }
 
-function SettingsView({ inventory, shopping, onReset }: { inventory: InventoryItem[]; shopping: ShoppingListItem[]; onReset: () => void }) { return <div className="list-view settings-view"><div className="page-intro"><div><div className="eyebrow">Make it yours</div><h1>Settings</h1><p>Small preferences for a calmer home routine.</p></div></div><div className="settings-grid"><section className="panel settings-panel"><div className="eyebrow">Workspace</div><h2>Marton&apos;s home</h2><p>This first version stores changes on this device. A Turso sync layer can slot into this same data model later.</p><div className="setting-row"><div><strong>Expiry reminders</strong><span>Show urgent items on the overview</span></div><span className="toggle on"><i /></span></div><div className="setting-row"><div><strong>Restock basics</strong><span>Offer a shopping item when a basic runs out</span></div><span className="toggle on"><i /></span></div></section><section className="panel settings-panel"><div className="eyebrow">Data</div><h2>Your local snapshot</h2><div className="data-stat"><span>Inventory items</span><strong>{inventory.length}</strong></div><div className="data-stat"><span>Shopping items</span><strong>{shopping.length}</strong></div><button className="secondary-button reset-button" onClick={onReset}>Restore demo data</button></section></div></div>; }
+function SettingsView({ inventory, shopping, onReset }: { inventory: InventoryItem[]; shopping: ShoppingListItem[]; onReset: () => void }) { return <div className="list-view settings-view"><div className="page-intro"><div><div className="eyebrow">Make it yours</div><h1>Settings</h1><p>Small preferences for a calmer home routine.</p></div></div><div className="settings-grid"><section className="panel settings-panel"><div className="eyebrow">Workspace</div><h2>Marton&apos;s home</h2><p>Inventory and shopping changes are stored in Turso. The recipe catalog is seeded locally and ready for a future provider.</p><div className="setting-row"><div><strong>Expiry reminders</strong><span>Show urgent items on the overview</span></div><span className="toggle on"><i /></span></div><div className="setting-row"><div><strong>Restock basics</strong><span>Offer a shopping item when a basic runs out</span></div><span className="toggle on"><i /></span></div></section><section className="panel settings-panel"><div className="eyebrow">Data</div><h2>Your database snapshot</h2><div className="data-stat"><span>Inventory items</span><strong>{inventory.length}</strong></div><div className="data-stat"><span>Shopping items</span><strong>{shopping.length}</strong></div><button className="secondary-button reset-button" onClick={onReset}>Restore demo data</button></section></div></div>; }
 
 function AddItemModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (item: Omit<InventoryItem, "id">) => void }) { const [name, setName] = useState(""); const [category, setCategory] = useState<Category>("Fridge"); const [quantity, setQuantity] = useState("1"); const [unit, setUnit] = useState("pieces"); const [expiry, setExpiry] = useState(""); const [location, setLocation] = useState(""); const [basic, setBasic] = useState(false); return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><form className="modal-card add-modal" onSubmit={(event) => { event.preventDefault(); if (name.trim()) onSubmit({ name: name.trim(), category, location: location || "Not set", quantity: Number(quantity) || 1, unit, expiry: expiry || undefined, purchaseDate: "2026-08-15", basic }); }}><div className="modal-header"><div><div className="eyebrow">New item</div><h2>Add to inventory</h2></div><IconButton label="Close" onClick={onClose}>×</IconButton></div><div className="form-grid"><label className="full">Name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Avocados" required /></label><label>Category<select value={category} onChange={(event) => setCategory(event.target.value as Category)}>{categories.map((option) => <option key={option}>{option}</option>)}</select></label><label>Quantity<input type="number" min="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label><label>Unit<select value={unit} onChange={(event) => setUnit(event.target.value)}><option>pieces</option><option>packs</option><option>grams</option><option>kg</option><option>liters</option><option>bottles</option></select></label><label>Expiry date<input type="date" value={expiry} onChange={(event) => setExpiry(event.target.value)} /></label><label className="full">Where is it kept?<input value={location} onChange={(event) => setLocation(event.target.value)} placeholder="e.g. Fridge door" /></label></div><label className="checkbox-label"><input type="checkbox" checked={basic} onChange={(event) => setBasic(event.target.checked)} /><span>Mark as a basic item <small>Offer to restock this when it&apos;s finished</small></span></label><div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button type="submit" className="primary-button">Save item</button></div></form></div>; }
 

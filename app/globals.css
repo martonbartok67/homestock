@@ -2,7 +2,7 @@
 
 :root { --ink: #1d2a29; --muted: #71807d; --line: #e5e9e5; --paper: #f7f8f5; --panel: #ffffff; --sage: #dfe9df; --sage-deep: #496355; --mint: #eff5ef; --amber: #f6e9c6; --amber-deep: #9a7020; --coral: #f8ded8; --coral-deep: #ad5549; --blue: #dfeaf2; --blue-deep: #4b718d; }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--paper); color: var(--ink); font-family: Arial, Helvetica, sans-serif; font-size: 14px; }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: "Segoe UI Variable", "Segoe UI", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif; font-size: 14px; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; font-synthesis: none; }
 button, input, select { font: inherit; }
 button { border: 0; cursor: pointer; color: inherit; }
 .app-shell { min-height: 100vh; display: flex; }

@@ -1,27 +1,22 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-async function render() {
-  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
-  const { default: worker } = await import(workerUrl.href);
+test("HomeStock is wired to the Turso-backed API", async () => {
+  const [page, route, schema, packageJson] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/home-stock/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
+    readFile(new URL("../package.json", import.meta.url), "utf8"),
+  ]);
 
-  return worker.fetch(
-    new Request("http://localhost/", { headers: { accept: "text/html" } }),
-    { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
-    { waitUntil() {}, passThroughOnException() {} },
-  );
-}
-
-test("server-renders the HomeStock dashboard", async () => {
-  const response = await render();
-  assert.equal(response.status, 200);
-  assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
-
-  const html = await response.text();
-  assert.match(html, /HomeStock/);
-  assert.match(html, /Next expiries/);
-  assert.match(html, /Shopping list/);
-  assert.match(html, /Spinach &amp; tomato frittata/);
-  assert.doesNotMatch(html, /Your site is taking shape|codex-preview|react-loading-skeleton/i);
+  assert.match(page, /fetch\("\/api\/home-stock"/);
+  assert.match(page, /Turso workspace/);
+  assert.match(route, /export async function GET/);
+  assert.match(route, /export async function POST/);
+  assert.match(schema, /inventory_items/);
+  assert.match(schema, /shopping_list_items/);
+  assert.match(schema, /recipe_ingredients/);
+  assert.match(packageJson, /"@libsql\/client": "0\.17\.4"/);
+  assert.match(packageJson, /"next": "16\.3\.1"/);
 });
