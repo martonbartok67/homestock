@@ -705,3 +705,14 @@ body { background: var(--paper); }
   .recipe-language-grid { grid-template-columns: 1fr; gap: 24px; }
   .recipe-shared-fields { max-width: none; }
 }
+
+/* Recipe modal text layout correction. Keep bilingual copy out of the step-number column. */
+.recipe-modal .steps-list li { grid-template-columns: 25px minmax(0, 1fr); column-gap: 10px; align-items: start; }
+.recipe-modal .steps-list li::before { grid-column: 1; grid-row: 1 / span 2; }
+.recipe-modal .steps-list li > strong, .recipe-modal .steps-list li > span { grid-column: 2; min-width: 0; display: block; word-break: normal; overflow-wrap: break-word; }
+.recipe-modal .steps-list li > strong { color: var(--ink); line-height: 1.45; }
+.recipe-modal .steps-list li > span { margin-top: 6px; color: var(--sage-deep); font-size: 12px; line-height: 1.5; }
+.recipe-modal .ingredient-list li > span.ingredient-check { width: 17px; height: 17px; flex: 0 0 17px; display: grid; place-items: center; border-radius: 5px; background: #eaf3ea; color: #6e9473; font-size: 11px; }
+.recipe-modal .ingredient-list li.missing > span.ingredient-check { background: #fcf1d9; color: #a67c2f; }
+.recipe-modal .ingredient-list li > div { min-width: 0; display: grid; gap: 2px; }
+.recipe-modal .ingredient-list li > div small { color: var(--sage-deep); font-size: 11px; line-height: 1.35; }
