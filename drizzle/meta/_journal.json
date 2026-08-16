@@ -8,6 +8,20 @@
       "when": 1786819643491,
       "tag": "0000_home_stock",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1786901300000,
+      "tag": "0001_household_isolation",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1786914000000,
+      "tag": "0002_household_members",
+      "breakpoints": true
     }
   ]
 }

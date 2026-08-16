@@ -1,3 +1,5 @@
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 import type { Recipe } from "../homestock";
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
@@ -5,6 +7,7 @@ type JsonRecord = { [key: string]: JsonValue };
 
 const blockedHosts = new Set(["localhost", "0.0.0.0", "127.0.0.1", "::1"]);
 const maxHtmlBytes = 1_000_000;
+const maxRedirects = 4;
 
 function assertPublicRecipeUrl(value: string) {
   let url: URL;
@@ -15,11 +18,80 @@ function assertPublicRecipeUrl(value: string) {
   }
 
   if (!["http:", "https:"].includes(url.protocol)) throw new Error("Recipe links must start with http or https.");
-  const host = url.hostname.toLowerCase();
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
   if (blockedHosts.has(host) || host.endsWith(".local") || host.startsWith("10.") || host.startsWith("192.168.") || /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)) {
     throw new Error("That recipe URL is not public.");
   }
   return url;
+}
+
+function isPrivateAddress(value: string) {
+  const address = value.toLowerCase().replace(/^\[|\]$/g, "");
+  if (address.startsWith("::ffff:")) return isPrivateAddress(address.slice(7));
+  if (isIP(address) === 4) {
+    const [a, b] = address.split(".").map(Number);
+    return a === 0
+      || a === 10
+      || a === 127
+      || (a === 100 && b >= 64 && b <= 127)
+      || (a === 169 && b === 254)
+      || (a === 172 && b >= 16 && b <= 31)
+      || (a === 192 && (b === 0 || b === 168))
+      || (a === 198 && (b === 18 || b === 19))
+      || a >= 224;
+  }
+  if (isIP(address) === 6) {
+    return address === "::"
+      || address === "::1"
+      || address.startsWith("fc")
+      || address.startsWith("fd")
+      || /^fe[89ab]/.test(address)
+      || address.startsWith("2001:db8:");
+  }
+  return true;
+}
+
+async function assertPublicHost(url: URL) {
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (isIP(host)) {
+    if (isPrivateAddress(host)) throw new Error("That recipe URL is not public.");
+    return;
+  }
+  let addresses;
+  try {
+    addresses = await lookup(host, { all: true, verbatim: true });
+  } catch {
+    throw new Error("Could not find that recipe website.");
+  }
+  if (addresses.length === 0 || addresses.some(({ address }) => isPrivateAddress(address))) {
+    throw new Error("That recipe URL is not public.");
+  }
+}
+
+async function readBoundedHtml(response: Response) {
+  const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+  if (contentType && !contentType.includes("text/html") && !contentType.includes("application/xhtml+xml")) {
+    throw new Error("That link is not a recipe webpage.");
+  }
+  const contentLength = Number(response.headers.get("content-length") ?? 0);
+  if (contentLength > maxHtmlBytes) throw new Error("That recipe page is too large to import safely.");
+  if (!response.body) return "";
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let html = "";
+  let bytes = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bytes += value.byteLength;
+    if (bytes > maxHtmlBytes) {
+      await reader.cancel();
+      throw new Error("That recipe page is too large to import safely.");
+    }
+    html += decoder.decode(value, { stream: true });
+  }
+  return html + decoder.decode();
 }
 
 function decodeHtml(value: string) {
@@ -164,19 +236,36 @@ function extractRecipeCard(html: string, url: URL): Omit<Recipe, "id"> | undefin
 }
 
 export async function importRecipeFromUrl(value: string): Promise<Omit<Recipe, "id">> {
-  const url = assertPublicRecipeUrl(value);
+  let url = assertPublicRecipeUrl(value);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8_000);
-  const response = await fetch(url, {
-    signal: controller.signal,
-    headers: {
-      accept: "text/html,application/xhtml+xml",
-      "user-agent": "HomeStock recipe importer",
-    },
-  }).finally(() => clearTimeout(timeout));
+  let response: Response | undefined;
+  let html = "";
+  try {
+    for (let redirect = 0; redirect <= maxRedirects; redirect += 1) {
+      await assertPublicHost(url);
+      response = await fetch(url, {
+        redirect: "manual",
+        signal: controller.signal,
+        headers: {
+          accept: "text/html,application/xhtml+xml",
+          "user-agent": "HomeStock recipe importer",
+        },
+      });
+      if (![301, 302, 303, 307, 308].includes(response.status)) break;
+      const location = response.headers.get("location");
+      if (!location || redirect === maxRedirects) throw new Error("That recipe page redirects too many times.");
+      url = assertPublicRecipeUrl(new URL(location, url).toString());
+    }
+    if (!response?.ok) throw new Error("Could not open that recipe page.");
+    html = await readBoundedHtml(response);
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error("That recipe page took too long to respond.");
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 
-  if (!response.ok) throw new Error("Could not open that recipe page.");
-  const html = (await response.text()).slice(0, maxHtmlBytes);
   const recipe = extractRecipe(html);
   const recipeCard = recipe ? undefined : extractRecipeCard(html, url);
   if (!recipe && !recipeCard) throw new Error("No recipe data was found on that page.");

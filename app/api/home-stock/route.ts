@@ -4,44 +4,58 @@ import {
   addRecipe,
   addShoppingItem,
   addShoppingItems,
+  deleteRecipe,
   deleteInventoryItem,
   deleteShoppingItem,
   finishInventoryItem,
   getSnapshot,
   toggleShoppingItem,
+  updateRecipe,
 } from "../../../lib/server/home-stock-repository";
+import { parseHomeStockAction, RequestValidationError } from "../../../lib/server/home-stock-input";
+import { householdAccessResponse, requireHousehold } from "../../../lib/server/household-auth";
 
 export const dynamic = "force-dynamic";
 
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Unexpected database error.";
-}
-
 export async function GET() {
   try {
-    return NextResponse.json(await getSnapshot());
+    const { householdId } = await requireHousehold();
+    return NextResponse.json(await getSnapshot(householdId));
   } catch (error) {
-    return NextResponse.json({ code: "DATABASE_NOT_CONFIGURED", error: errorMessage(error) }, { status: 503 });
+    const accessResponse = householdAccessResponse(error);
+    if (accessResponse) return accessResponse;
+    console.error("[home-stock] Could not load household data.", error);
+    return NextResponse.json({ code: "DATABASE_UNAVAILABLE", error: "Household data is unavailable right now." }, { status: 503 });
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json() as { action?: string; id?: string; item?: Record<string, unknown>; items?: Array<Record<string, unknown>>; recipe?: Record<string, unknown> };
+    const { householdId } = await requireHousehold();
+    const body = parseHomeStockAction(await request.json().catch(() => {
+      throw new RequestValidationError("Request body must be valid JSON.");
+    }));
     let snapshot;
     switch (body.action) {
-      case "addInventory": snapshot = await addInventoryItem(body.item as never); break;
-      case "deleteInventory": snapshot = await deleteInventoryItem(String(body.id)); break;
-      case "finishInventory": snapshot = await finishInventoryItem(String(body.id)); break;
-      case "addShopping": snapshot = await addShoppingItem(body.item as never); break;
-      case "addShoppingBatch": snapshot = await addShoppingItems((body.items ?? []) as never); break;
-      case "addRecipe": snapshot = await addRecipe(body.recipe as never); break;
-      case "toggleShopping": snapshot = await toggleShoppingItem(String(body.id)); break;
-      case "deleteShopping": snapshot = await deleteShoppingItem(String(body.id)); break;
-      default: return NextResponse.json({ error: "Unknown HomeStock action." }, { status: 400 });
+      case "addInventory": snapshot = await addInventoryItem(householdId, body.item); break;
+      case "deleteInventory": snapshot = await deleteInventoryItem(householdId, body.id); break;
+      case "finishInventory": snapshot = await finishInventoryItem(householdId, body.id); break;
+      case "addShopping": snapshot = await addShoppingItem(householdId, body.item); break;
+      case "addShoppingBatch": snapshot = await addShoppingItems(householdId, body.items); break;
+      case "addRecipe": snapshot = await addRecipe(householdId, body.recipe); break;
+      case "updateRecipe": snapshot = await updateRecipe(householdId, body.id, body.recipe); break;
+      case "deleteRecipe": snapshot = await deleteRecipe(householdId, body.id); break;
+      case "toggleShopping": snapshot = await toggleShoppingItem(householdId, body.id); break;
+      case "deleteShopping": snapshot = await deleteShoppingItem(householdId, body.id); break;
     }
     return NextResponse.json(snapshot);
   } catch (error) {
-    return NextResponse.json({ code: "DATABASE_ERROR", error: errorMessage(error) }, { status: 503 });
+    const accessResponse = householdAccessResponse(error);
+    if (accessResponse) return accessResponse;
+    if (error instanceof RequestValidationError) {
+      return NextResponse.json({ code: "INVALID_REQUEST", error: error.message }, { status: 400 });
+    }
+    console.error("[home-stock] Could not save household change.", error);
+    return NextResponse.json({ code: "DATABASE_ERROR", error: "Couldn’t save that change. Please try again." }, { status: 503 });
   }
 }

@@ -54,7 +54,7 @@ button { border: 0; cursor: pointer; color: inherit; }
 }
 
 body {
-  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-manrope), ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 15px;
   line-height: 1.45;
   letter-spacing: -0.012em;
@@ -665,7 +665,23 @@ body { background: var(--paper); }
 
 /* Final overrides for bilingual recipe entry and current app chrome. */
 .recipe-heading-actions { display: flex; align-items: center; gap: 16px; }
-.recipe-heading-actions .primary-button { display: inline-flex; white-space: nowrap; }
+.recipe-heading-actions .primary-button, .recipe-heading-actions .secondary-button { display: inline-flex; white-space: nowrap; }
+.recipe-heading-actions .secondary-button:disabled { opacity: .6; cursor: wait; }
+.online-suggestion-panel { display: flex; justify-content: space-between; gap: 18px; align-items: center; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 17px 0; margin: -4px 0 18px; }
+.online-suggestion-panel span, .online-suggestion-panel small { display: block; color: var(--muted); font-size: 11px; font-weight: 700; }
+.online-suggestion-panel strong { display: block; color: var(--ink); font-size: 16px; margin-top: 4px; }
+.online-suggestion-panel p { color: var(--muted); font-size: 12px; line-height: 1.5; margin: 6px 0 0; max-width: 680px; }
+.online-suggestion-panel small { color: var(--sage-deep); margin-top: 7px; }
+.online-suggestion-actions { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+.recipe-controls { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.recipe-controls .mode-tabs { flex: 1; }
+.tag-filter { display: grid; gap: 6px; min-width: 150px; color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.tag-filter select { width: 100%; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); font: inherit; font-size: 12px; letter-spacing: 0; text-transform: none; outline: 0; padding: 9px 10px; }
+.tag-filter select:focus { border-color: #9fbba3; box-shadow: 0 0 0 3px #edf5ed; }
+.recipe-card { position: relative; }
+.recipe-card-tools { position: absolute; top: 12px; right: 12px; display: flex; gap: 3px; opacity: .72; }
+.recipe-card:hover .recipe-card-tools { opacity: 1; }
+.recipe-card-tools .icon-button { width: 26px; height: 26px; font-size: 14px; background: #f7fbf6; border: 1px solid var(--line); }
 .recipe-localized-name { display: block; color: var(--sage-deep); font-size: 13px; font-weight: 700; margin-top: 3px; }
 .recipe-localized-copy { color: var(--sage-deep) !important; font-style: italic; }
 .recipe-form-modal { width: min(900px, calc(100vw - 34px)); max-height: calc(100vh - 34px); overflow: auto; }
@@ -694,6 +710,8 @@ body { background: var(--paper); }
 .ingredient-list li small { grid-column: 2; color: var(--sage-deep); font-size: 10px; }
 .settings-button { width: 38px; height: 38px; border: 1px solid var(--line); background: #f7fbf6; color: var(--sage-deep); font-size: 18px; }
 .settings-button.active, .settings-button:hover { background: #e1e9e1; color: var(--sage-deep); }
+.setting-status { border-radius: 999px; background: var(--mint); color: var(--sage-deep) !important; font-size: 10px !important; font-weight: 800; padding: 6px 9px; white-space: nowrap; }
+.primary-button:disabled, .secondary-button:disabled, .add-list-form button:disabled { cursor: wait; opacity: .62; }
 .topbar-actions .icon-button { display: grid; place-items: center; }
 .sidebar-bottom { gap: 0; }
 .app-mark { background: #eef8ff; border: 1px solid #d7efff; transform: none; box-shadow: 0 8px 20px #0c79d81a; }
@@ -702,7 +720,12 @@ body { background: var(--paper); }
 @media (max-width: 760px) {
   .recipe-heading-actions { align-items: flex-end; gap: 8px; }
   .recipe-heading-actions .recipe-badge { display: none; }
-  .recipe-heading-actions .primary-button { display: inline-flex; padding: 9px 12px; font-size: 11px; }
+  .recipe-heading-actions .primary-button, .recipe-heading-actions .secondary-button { display: inline-flex; padding: 9px 12px; font-size: 11px; }
+  .online-suggestion-panel { display: grid; gap: 14px; align-items: start; }
+  .online-suggestion-actions { justify-content: flex-start; }
+  .recipe-controls { display: grid; gap: 12px; }
+  .tag-filter { min-width: 0; }
+  .recipe-card-tools { opacity: 1; }
   .recipe-form-modal { width: calc(100vw - 24px); max-height: calc(100vh - 24px); padding: 17px; }
   .recipe-language-grid { grid-template-columns: 1fr; gap: 24px; }
   .recipe-shared-fields { max-width: none; }
@@ -718,3 +741,39 @@ body { background: var(--paper); }
 .recipe-modal .ingredient-list li.missing > span.ingredient-check { background: #fcf1d9; color: #a67c2f; }
 .recipe-modal .ingredient-list li > div { min-width: 0; display: grid; gap: 2px; }
 .recipe-modal .ingredient-list li > div small { color: var(--sage-deep); font-size: 11px; line-height: 1.35; }
+
+/* Login and household access. Turso remains the data store; Clerk is the door. */
+.home-label span, .home-label strong { display: block; }
+.home-label strong { margin-top: 5px; color: var(--ink); font-size: 12px; letter-spacing: 0; line-height: 1.35; text-transform: none; }
+.session-loading { min-height: 100svh; display: grid; place-content: center; justify-items: center; gap: 12px; background: var(--cream); color: var(--muted); font-size: 13px; font-weight: 700; }
+.auth-page { min-height: 100svh; display: grid; grid-template-columns: minmax(280px, .9fr) minmax(360px, 1.1fr); background: var(--cream); }
+.auth-intro { display: flex; min-height: 100%; flex-direction: column; justify-content: space-between; gap: 60px; padding: clamp(30px, 6vw, 78px); background: #eaf3ea; }
+.auth-brand { display: inline-flex; align-items: center; gap: 11px; width: fit-content; color: var(--ink); font-size: 18px; font-weight: 800; text-decoration: none; }
+.auth-intro h1, .household-gate h1 { max-width: 560px; margin: 10px 0 12px; color: var(--ink); font-size: clamp(38px, 6vw, 72px); line-height: .98; letter-spacing: -.055em; }
+.auth-intro p, .household-gate p { max-width: 470px; margin: 0; color: var(--muted); font-size: 15px; line-height: 1.7; }
+.auth-form { display: grid; place-items: center; padding: 28px; }
+.auth-form-shell { display: grid; place-items: center; min-height: 520px; width: min(100%, 450px); border: 1px solid var(--line); border-radius: 24px; background: #fff; box-shadow: 0 24px 70px #29433114; padding: 22px; }
+.household-gate { min-height: 100svh; display: grid; grid-template-columns: minmax(280px, .95fr) minmax(340px, 1.05fr); align-items: center; gap: clamp(32px, 8vw, 110px); padding: clamp(28px, 7vw, 92px); background: linear-gradient(120deg, #edf5ed 0 45%, var(--cream) 45% 100%); }
+.household-gate > section { display: grid; gap: clamp(36px, 8vw, 90px); }
+.household-gate .brand { width: fit-content; }
+.household-gate-note { align-content: center; max-width: 540px; padding: clamp(26px, 5vw, 58px); border-left: 1px solid var(--line); }
+.household-gate-note h2 { max-width: 470px; margin: 10px 0 14px; color: var(--ink); font-size: clamp(28px, 4vw, 48px); line-height: 1.05; letter-spacing: -.045em; }
+.household-account { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; font-weight: 700; }
+.account-control { display: flex; align-items: center; justify-content: space-between; gap: 18px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 14px 0; }
+.account-control > div:first-child { min-width: 0; }
+.account-control strong, .account-control span { display: block; }
+.account-control strong { color: var(--ink); font-size: 13px; }
+.account-control span { margin-top: 3px; color: var(--muted); font-size: 11px; }
+
+@media (max-width: 760px) {
+  .auth-page, .household-gate { grid-template-columns: 1fr; }
+  .auth-page { align-content: start; }
+  .auth-intro { min-height: auto; gap: 42px; padding: 28px 24px 36px; }
+  .auth-intro h1, .household-gate h1 { font-size: 42px; }
+  .auth-form { padding: 24px 14px 42px; }
+  .auth-form-shell { min-height: 500px; border-radius: 18px; padding: 8px; }
+  .household-gate { align-content: start; gap: 34px; padding: 28px 18px 46px; background: linear-gradient(180deg, #edf5ed 0 42%, var(--cream) 42% 100%); }
+  .household-gate > section { gap: 32px; }
+  .household-gate-note { border-top: 1px solid var(--line); border-left: 0; padding: 30px 6px 0; }
+  .account-control { align-items: flex-start; }
+}
