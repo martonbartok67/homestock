@@ -27,12 +27,17 @@ export type ShoppingListItem = {
 export type Recipe = {
   id: string;
   name: string;
+  nameHu?: string;
   description: string;
+  descriptionHu?: string;
   ingredients: string[];
+  ingredientsHu?: string[];
   time: string;
   difficulty: "Easy" | "Medium";
   tags: string[];
+  tagsHu?: string[];
   steps: string[];
+  stepsHu?: string[];
 };
 
 export const categories: Category[] = ["Fridge", "Freezer", "Pantry", "Household", "Bathroom", "Cleaning"];

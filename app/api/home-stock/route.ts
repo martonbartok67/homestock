@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   addInventoryItem,
+  addRecipe,
   addShoppingItem,
   addShoppingItems,
   deleteInventoryItem,
@@ -26,7 +27,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json() as { action?: string; id?: string; item?: Record<string, unknown>; items?: Array<Record<string, unknown>> };
+    const body = await request.json() as { action?: string; id?: string; item?: Record<string, unknown>; items?: Array<Record<string, unknown>>; recipe?: Record<string, unknown> };
     let snapshot;
     switch (body.action) {
       case "addInventory": snapshot = await addInventoryItem(body.item as never); break;
@@ -34,6 +35,7 @@ export async function POST(request: Request) {
       case "finishInventory": snapshot = await finishInventoryItem(String(body.id)); break;
       case "addShopping": snapshot = await addShoppingItem(body.item as never); break;
       case "addShoppingBatch": snapshot = await addShoppingItems((body.items ?? []) as never); break;
+      case "addRecipe": snapshot = await addRecipe(body.recipe as never); break;
       case "toggleShopping": snapshot = await toggleShoppingItem(String(body.id)); break;
       case "deleteShopping": snapshot = await deleteShoppingItem(String(body.id)); break;
       default: return NextResponse.json({ error: "Unknown HomeStock action." }, { status: 400 });

@@ -41,11 +41,15 @@ export const shoppingListItems = sqliteTable(
 export const recipes = sqliteTable("recipes", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
+  nameHu: text("name_hu"),
   description: text("description").notNull(),
+  descriptionHu: text("description_hu"),
   time: text("time").notNull(),
   difficulty: text("difficulty").notNull(),
   tags: text("tags").notNull().default("[]"),
+  tagsHu: text("tags_hu").notNull().default("[]"),
   steps: text("steps").notNull().default("[]"),
+  stepsHu: text("steps_hu").notNull().default("[]"),
   createdAt: text("created_at").notNull(),
 });
 
@@ -55,6 +59,7 @@ export const recipeIngredients = sqliteTable(
     id: text("id").primaryKey(),
     recipeId: text("recipe_id").notNull(),
     ingredientName: text("ingredient_name").notNull(),
+    ingredientNameHu: text("ingredient_name_hu"),
     sortOrder: integer("sort_order").notNull().default(0),
   },
   (table) => ({

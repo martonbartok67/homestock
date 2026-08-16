@@ -18,8 +18,8 @@ const schemaStatements = [
   `CREATE INDEX IF NOT EXISTS inventory_items_expiry_idx ON inventory_items (expiry)`,
   `CREATE TABLE IF NOT EXISTS shopping_list_items (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, quantity TEXT NOT NULL DEFAULT '1', category TEXT NOT NULL, checked INTEGER NOT NULL DEFAULT 0, note TEXT, source TEXT NOT NULL DEFAULT 'manual', created_at TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS shopping_list_items_checked_idx ON shopping_list_items (checked)`,
-  `CREATE TABLE IF NOT EXISTS recipes (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, description TEXT NOT NULL, time TEXT NOT NULL, difficulty TEXT NOT NULL, tags TEXT NOT NULL DEFAULT '[]', steps TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL)`,
-  `CREATE TABLE IF NOT EXISTS recipe_ingredients (id TEXT PRIMARY KEY NOT NULL, recipe_id TEXT NOT NULL, ingredient_name TEXT NOT NULL, sort_order INTEGER NOT NULL DEFAULT 0)`,
+  `CREATE TABLE IF NOT EXISTS recipes (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, name_hu TEXT, description TEXT NOT NULL, description_hu TEXT, time TEXT NOT NULL, difficulty TEXT NOT NULL, tags TEXT NOT NULL DEFAULT '[]', tags_hu TEXT NOT NULL DEFAULT '[]', steps TEXT NOT NULL DEFAULT '[]', steps_hu TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS recipe_ingredients (id TEXT PRIMARY KEY NOT NULL, recipe_id TEXT NOT NULL, ingredient_name TEXT NOT NULL, ingredient_name_hu TEXT, sort_order INTEGER NOT NULL DEFAULT 0)`,
   `CREATE INDEX IF NOT EXISTS recipe_ingredients_recipe_idx ON recipe_ingredients (recipe_id)`,
   `CREATE TABLE IF NOT EXISTS user_preferences (id TEXT PRIMARY KEY NOT NULL, workspace_name TEXT NOT NULL DEFAULT 'Marton''s home', created_at TEXT NOT NULL)`,
 ];
@@ -36,6 +36,23 @@ function safeJson<T>(value: string, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+async function ensureRecipeLanguageColumns() {
+  const client = getSqlClient();
+  const [recipeInfo, ingredientInfo] = await Promise.all([
+    client.execute("PRAGMA table_info(recipes)"),
+    client.execute("PRAGMA table_info(recipe_ingredients)"),
+  ]);
+  const recipeColumns = new Set(recipeInfo.rows.map((row) => String(row.name)));
+  const ingredientColumns = new Set(ingredientInfo.rows.map((row) => String(row.name)));
+  const statements: string[] = [];
+  if (!recipeColumns.has("name_hu")) statements.push("ALTER TABLE recipes ADD COLUMN name_hu TEXT");
+  if (!recipeColumns.has("description_hu")) statements.push("ALTER TABLE recipes ADD COLUMN description_hu TEXT");
+  if (!recipeColumns.has("tags_hu")) statements.push("ALTER TABLE recipes ADD COLUMN tags_hu TEXT NOT NULL DEFAULT '[]'");
+  if (!recipeColumns.has("steps_hu")) statements.push("ALTER TABLE recipes ADD COLUMN steps_hu TEXT NOT NULL DEFAULT '[]'");
+  if (!ingredientColumns.has("ingredient_name_hu")) statements.push("ALTER TABLE recipe_ingredients ADD COLUMN ingredient_name_hu TEXT");
+  if (statements.length > 0) await client.batch(statements);
 }
 
 function mapInventory(row: typeof inventoryItems.$inferSelect): InventoryItem {
@@ -68,7 +85,7 @@ function mapShopping(row: typeof shoppingListItems.$inferSelect): ShoppingListIt
 export async function ensureDatabase() {
   if (!initialization) {
     const client = getSqlClient();
-    initialization = client.batch(schemaStatements).then(() => undefined);
+    initialization = client.batch(schemaStatements).then(() => ensureRecipeLanguageColumns());
   }
   await initialization;
 }
@@ -86,12 +103,17 @@ export async function getSnapshot() {
   const recipes: Recipe[] = recipeRows.map((recipe) => ({
     id: recipe.id,
     name: recipe.name,
+    nameHu: recipe.nameHu ?? undefined,
     description: recipe.description,
+    descriptionHu: recipe.descriptionHu ?? undefined,
     time: recipe.time,
     difficulty: recipe.difficulty as Recipe["difficulty"],
     tags: safeJson<string[]>(recipe.tags, []),
+    tagsHu: safeJson<string[]>(recipe.tagsHu ?? "[]", []),
     steps: safeJson<string[]>(recipe.steps, []),
+    stepsHu: safeJson<string[]>(recipe.stepsHu ?? "[]", []),
     ingredients: ingredientRows.filter((ingredient) => ingredient.recipeId === recipe.id).map((ingredient) => ingredient.ingredientName),
+    ingredientsHu: ingredientRows.filter((ingredient) => ingredient.recipeId === recipe.id).map((ingredient) => ingredient.ingredientNameHu ?? ""),
   }));
 
   return {
@@ -195,5 +217,35 @@ export async function toggleShoppingItem(id: string) {
 export async function deleteShoppingItem(id: string) {
   await ensureDatabase();
   await getDb().delete(shoppingListItems).where(eq(shoppingListItems.id, id));
+  return getSnapshot();
+}
+
+export async function addRecipe(recipe: Omit<Recipe, "id">) {
+  await ensureDatabase();
+  const db = getDb();
+  const id = crypto.randomUUID();
+  await db.insert(recipeTable).values({
+    id,
+    name: recipe.name,
+    nameHu: recipe.nameHu ?? null,
+    description: recipe.description,
+    descriptionHu: recipe.descriptionHu ?? null,
+    time: recipe.time,
+    difficulty: recipe.difficulty,
+    tags: JSON.stringify(recipe.tags),
+    tagsHu: JSON.stringify(recipe.tagsHu ?? []),
+    steps: JSON.stringify(recipe.steps),
+    stepsHu: JSON.stringify(recipe.stepsHu ?? []),
+    createdAt: now(),
+  });
+  if (recipe.ingredients.length > 0) {
+    await db.insert(recipeIngredients).values(recipe.ingredients.map((ingredientName, sortOrder) => ({
+      id: crypto.randomUUID(),
+      recipeId: id,
+      ingredientName,
+      ingredientNameHu: recipe.ingredientsHu?.[sortOrder] ?? null,
+      sortOrder,
+    })));
+  }
   return getSnapshot();
 }
