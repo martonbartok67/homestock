@@ -69,6 +69,6 @@ export const recipeIngredients = sqliteTable(
 
 export const userPreferences = sqliteTable("user_preferences", {
   id: text("id").primaryKey(),
-  workspaceName: text("workspace_name").notNull().default("Marton's home"),
+  workspaceName: text("workspace_name").notNull().default("Emma & Marci's household"),
   createdAt: text("created_at").notNull(),
 });

@@ -11,7 +11,8 @@ test("HomeStock is wired to the Turso-backed API", async () => {
   ]);
 
   assert.match(page, /fetch\("\/api\/home-stock"/);
-  assert.match(page, /Turso workspace/);
+  assert.match(page, /Emma &amp; Marci&apos;s household/);
+  assert.match(page, /Good afternoon|Good evening|Good morning|Good night/);
   assert.match(route, /export async function GET/);
   assert.match(route, /export async function POST/);
   assert.match(schema, /inventory_items/);

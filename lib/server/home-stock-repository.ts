@@ -21,7 +21,7 @@ const schemaStatements = [
   `CREATE TABLE IF NOT EXISTS recipes (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, name_hu TEXT, description TEXT NOT NULL, description_hu TEXT, time TEXT NOT NULL, difficulty TEXT NOT NULL, tags TEXT NOT NULL DEFAULT '[]', tags_hu TEXT NOT NULL DEFAULT '[]', steps TEXT NOT NULL DEFAULT '[]', steps_hu TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS recipe_ingredients (id TEXT PRIMARY KEY NOT NULL, recipe_id TEXT NOT NULL, ingredient_name TEXT NOT NULL, ingredient_name_hu TEXT, sort_order INTEGER NOT NULL DEFAULT 0)`,
   `CREATE INDEX IF NOT EXISTS recipe_ingredients_recipe_idx ON recipe_ingredients (recipe_id)`,
-  `CREATE TABLE IF NOT EXISTS user_preferences (id TEXT PRIMARY KEY NOT NULL, workspace_name TEXT NOT NULL DEFAULT 'Marton''s home', created_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS user_preferences (id TEXT PRIMARY KEY NOT NULL, workspace_name TEXT NOT NULL DEFAULT 'Emma & Marci''s household', created_at TEXT NOT NULL)`,
 ];
 
 let initialization: Promise<void> | undefined;
@@ -120,7 +120,7 @@ export async function getSnapshot() {
     inventory: inventory.map(mapInventory),
     shopping: shopping.map(mapShopping),
     recipes,
-    database: { connected: true, workspace: "Marton's home" },
+    database: { connected: true, workspace: "Emma & Marci's household" },
   };
 }
 

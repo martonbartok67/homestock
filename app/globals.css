@@ -666,7 +666,7 @@ body { background: var(--paper); }
   .recipe-grid { gap: 0; }
 }
 
-/* Final overrides for bilingual recipe entry and the fifth mobile menu tab. */
+/* Final overrides for bilingual recipe entry and current app chrome. */
 .recipe-heading-actions { display: flex; align-items: center; gap: 16px; }
 .recipe-heading-actions .primary-button { display: inline-flex; white-space: nowrap; }
 .recipe-localized-name { display: block; color: var(--sage-deep); font-size: 13px; font-weight: 700; margin-top: 3px; }
@@ -695,6 +695,10 @@ body { background: var(--paper); }
 .ingredient-list li > span { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; align-items: center; width: auto; height: auto; background: transparent; }
 .ingredient-list li > span > span { grid-row: span 2; }
 .ingredient-list li small { grid-column: 2; color: var(--sage-deep); font-size: 10px; }
+.settings-button { width: 38px; height: 38px; border: 1px solid var(--line); background: #f7fbf6; color: var(--sage-deep); font-size: 18px; }
+.settings-button.active, .settings-button:hover { background: #e1e9e1; color: var(--sage-deep); }
+.topbar-actions .icon-button { display: grid; place-items: center; }
+.sidebar-bottom { gap: 0; }
 
 @media (max-width: 760px) {
   .recipe-heading-actions { align-items: flex-end; gap: 8px; }
