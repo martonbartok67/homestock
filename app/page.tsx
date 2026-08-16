@@ -265,6 +265,7 @@ function RecipeFormModal({ onClose, onSubmit }: { onClose: () => void; onSubmit:
   const [sourceUrl, setSourceUrl] = useState("");
   const [importUrl, setImportUrl] = useState("");
   const [importStatus, setImportStatus] = useState("");
+  const [formError, setFormError] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const [nameEn, setNameEn] = useState("");
   const [nameHu, setNameHu] = useState("");
@@ -280,10 +281,43 @@ function RecipeFormModal({ onClose, onSubmit }: { onClose: () => void; onSubmit:
   const [difficulty, setDifficulty] = useState<Recipe["difficulty"]>("Easy");
   const splitLines = (value: string) => value.split("\n").map((line) => line.trim()).filter(Boolean);
   const splitTags = (value: string) => value.split(",").map((tag) => tag.trim()).filter(Boolean);
+  const submitRecipe = () => {
+    const englishIngredients = splitLines(ingredientsEn);
+    const hungarianIngredients = splitLines(ingredientsHu);
+    const englishSteps = splitLines(stepsEn);
+    const hungarianSteps = splitLines(stepsHu);
+    const name = nameEn.trim() || nameHu.trim();
+    const description = descriptionEn.trim() || descriptionHu.trim() || "Home recipe";
+    const ingredients = englishIngredients.length ? englishIngredients : hungarianIngredients;
+    const steps = englishSteps.length ? englishSteps : hungarianSteps;
+
+    if (!name || ingredients.length === 0 || steps.length === 0) {
+      setFormError("Add a name, ingredients and steps in either English or Hungarian.");
+      return;
+    }
+
+    setFormError("");
+    onSubmit({
+      name,
+      nameHu: nameHu.trim(),
+      description,
+      descriptionHu: descriptionHu.trim(),
+      sourceUrl: sourceUrl || undefined,
+      ingredients,
+      ingredientsHu: hungarianIngredients,
+      time: time.trim() || "30 min",
+      difficulty,
+      tags: splitTags(tagsEn),
+      tagsHu: splitTags(tagsHu),
+      steps,
+      stepsHu: hungarianSteps,
+    });
+  };
   const importRecipe = async () => {
     if (!importUrl.trim()) return;
     setIsImporting(true);
     setImportStatus("Reading recipe page...");
+    setFormError("");
     try {
       const response = await fetch("/api/recipes/import", {
         method: "POST",
@@ -300,14 +334,14 @@ function RecipeFormModal({ onClose, onSubmit }: { onClose: () => void; onSubmit:
       setTime(body.recipe.time);
       setDifficulty(body.recipe.difficulty);
       setSourceUrl(body.recipe.sourceUrl ?? importUrl.trim());
-      setImportStatus("Imported. Review it, add magyar text, then save.");
+      setImportStatus("Imported. Review it, then save. Magyar text is optional.");
     } catch (error) {
       setImportStatus(error instanceof Error ? error.message : "Recipe import failed.");
     } finally {
       setIsImporting(false);
     }
   };
-  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><form className="modal-card recipe-form-modal" onSubmit={(event) => { event.preventDefault(); onSubmit({ name: nameEn.trim(), nameHu: nameHu.trim(), description: descriptionEn.trim(), descriptionHu: descriptionHu.trim(), sourceUrl: sourceUrl || undefined, ingredients: splitLines(ingredientsEn), ingredientsHu: splitLines(ingredientsHu), time: time.trim() || "30 min", difficulty, tags: splitTags(tagsEn), tagsHu: splitTags(tagsHu), steps: splitLines(stepsEn), stepsHu: splitLines(stepsHu) }); }}><div className="modal-header"><div><div className="eyebrow">New recipe</div><h2>Add in English + magyar</h2></div><IconButton label="Close" onClick={onClose}>×</IconButton></div><p className="form-hint">Import a public recipe page, then review and save it in both languages.</p><div className="recipe-import-box"><label>Recipe URL<input value={importUrl} onChange={(event) => setImportUrl(event.target.value)} placeholder="https://..." /></label><button type="button" className="secondary-button" onClick={importRecipe} disabled={isImporting}>{isImporting ? "Importing..." : "Import"}</button>{importStatus && <span>{importStatus}</span>}</div><div className="recipe-language-grid"><section><div className="language-label">English</div><label>Name<input value={nameEn} onChange={(event) => setNameEn(event.target.value)} placeholder="e.g. Vegetable pasta" required /></label><label>Description<textarea value={descriptionEn} onChange={(event) => setDescriptionEn(event.target.value)} placeholder="A short description" rows={3} required /></label><label>Ingredients<textarea value={ingredientsEn} onChange={(event) => setIngredientsEn(event.target.value)} placeholder={"One per line\nPasta\nTomatoes"} rows={5} required /></label><label>Steps<textarea value={stepsEn} onChange={(event) => setStepsEn(event.target.value)} placeholder={"One per line\nBoil the pasta\nAdd the sauce"} rows={5} required /></label><label>Tags<input value={tagsEn} onChange={(event) => setTagsEn(event.target.value)} placeholder="Vegetarian, Quick" /></label></section><section><div className="language-label">Magyar</div><label>Név<input value={nameHu} onChange={(event) => setNameHu(event.target.value)} placeholder="pl. Zöldséges tészta" required /></label><label>Leírás<textarea value={descriptionHu} onChange={(event) => setDescriptionHu(event.target.value)} placeholder="Rövid leírás" rows={3} required /></label><label>Hozzávalók<textarea value={ingredientsHu} onChange={(event) => setIngredientsHu(event.target.value)} placeholder={"Soronként egyet\nTészta\nParadicsom"} rows={5} required /></label><label>Elkészítés<textarea value={stepsHu} onChange={(event) => setStepsHu(event.target.value)} placeholder={"Soronként egyet\nFőzd meg a tésztát\nAdd hozzá a szószt"} rows={5} required /></label><label>Címkék<input value={tagsHu} onChange={(event) => setTagsHu(event.target.value)} placeholder="Vegetáriánus, Gyors" /></label></section></div><div className="recipe-shared-fields"><label>Time<input value={time} onChange={(event) => setTime(event.target.value)} placeholder="30 min" /></label><label>Difficulty<select value={difficulty} onChange={(event) => setDifficulty(event.target.value as Recipe["difficulty"])}><option>Easy</option><option>Medium</option></select></label></div><div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button type="submit" className="primary-button">Save recipe</button></div></form></div>;
+  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><form className="modal-card recipe-form-modal" onSubmit={(event) => { event.preventDefault(); submitRecipe(); }} noValidate><div className="modal-header"><div><div className="eyebrow">New recipe</div><h2>Add recipe</h2></div><IconButton label="Close" onClick={onClose}>×</IconButton></div><p className="form-hint">Use a URL or type it yourself. English is the main display language; magyar text is optional.</p><div className="recipe-import-box"><label>Recipe URL<input value={importUrl} onChange={(event) => setImportUrl(event.target.value)} placeholder="https://..." /></label><button type="button" className="secondary-button" onClick={importRecipe} disabled={isImporting}>{isImporting ? "Importing..." : "Import"}</button>{importStatus && <span>{importStatus}</span>}</div>{formError && <p className="form-error">{formError}</p>}<div className="recipe-language-grid"><section><div className="language-label">English</div><label>Name<input value={nameEn} onChange={(event) => setNameEn(event.target.value)} placeholder="e.g. Vegetable pasta" /></label><label>Description<textarea value={descriptionEn} onChange={(event) => setDescriptionEn(event.target.value)} placeholder="A short description" rows={3} /></label><label>Ingredients<textarea value={ingredientsEn} onChange={(event) => setIngredientsEn(event.target.value)} placeholder={"One per line\nPasta\nTomatoes"} rows={5} /></label><label>Steps<textarea value={stepsEn} onChange={(event) => setStepsEn(event.target.value)} placeholder={"One per line\nBoil the pasta\nAdd the sauce"} rows={5} /></label><label>Tags<input value={tagsEn} onChange={(event) => setTagsEn(event.target.value)} placeholder="Vegetarian, Quick" /></label></section><section><div className="language-label">Magyar <span>optional</span></div><label>Név<input value={nameHu} onChange={(event) => setNameHu(event.target.value)} placeholder="pl. Zöldséges tészta" /></label><label>Leírás<textarea value={descriptionHu} onChange={(event) => setDescriptionHu(event.target.value)} placeholder="Rövid leírás" rows={3} /></label><label>Hozzávalók<textarea value={ingredientsHu} onChange={(event) => setIngredientsHu(event.target.value)} placeholder={"Soronként egyet\nTészta\nParadicsom"} rows={5} /></label><label>Elkészítés<textarea value={stepsHu} onChange={(event) => setStepsHu(event.target.value)} placeholder={"Soronként egyet\nFőzd meg a tésztát\nAdd hozzá a szószt"} rows={5} /></label><label>Címkék<input value={tagsHu} onChange={(event) => setTagsHu(event.target.value)} placeholder="Vegetáriánus, Gyors" /></label></section></div><div className="recipe-shared-fields"><label>Time<input value={time} onChange={(event) => setTime(event.target.value)} placeholder="30 min" /></label><label>Difficulty<select value={difficulty} onChange={(event) => setDifficulty(event.target.value as Recipe["difficulty"])}><option>Easy</option><option>Medium</option></select></label></div><div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button type="submit" className="primary-button">Save recipe</button></div></form></div>;
 }
 
 function SettingsView({ inventory, shopping }: { inventory: InventoryItem[]; shopping: ShoppingListItem[] }) { return <div className="list-view settings-view"><div className="page-intro"><div><div className="eyebrow">Make it yours</div><h1>Settings</h1><p>Small preferences for a calmer home routine.</p></div></div><div className="settings-grid"><section className="panel settings-panel"><div className="eyebrow">Workspace</div><h2>Emma &amp; Marci&apos;s household</h2><p>Inventory, shopping and recipe changes sync across the household.</p><div className="setting-row"><div><strong>Expiry reminders</strong><span>Show urgent items on the overview</span></div><span className="toggle on"><i /></span></div><div className="setting-row"><div><strong>Restock basics</strong><span>Offer a shopping item when a basic runs out</span></div><span className="toggle on"><i /></span></div></section><section className="panel settings-panel"><div className="eyebrow">Data</div><h2>Household snapshot</h2><div className="data-stat"><span>Inventory items</span><strong>{inventory.length}</strong></div><div className="data-stat"><span>Shopping items</span><strong>{shopping.length}</strong></div></section></div></div>; }

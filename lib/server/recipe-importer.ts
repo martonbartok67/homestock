@@ -29,11 +29,16 @@ function decodeHtml(value: string) {
     .replace(/&#39;/g, "'")
     .replace(/&apos;/g, "'")
     .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">");
+    .replace(/&gt;/g, ">")
+    .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([\da-f]+);/gi, (_, code: string) => String.fromCodePoint(Number.parseInt(code, 16)));
 }
 
 function stripTags(value: string) {
-  return decodeHtml(value.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim());
+  return decodeHtml(value.replace(/<[^>]*>/g, " "))
+    .replace(/[▢☐]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function asRecord(value: JsonValue | undefined): JsonRecord | undefined {
@@ -122,6 +127,42 @@ function firstMeta(html: string, patterns: RegExp[]) {
   return undefined;
 }
 
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function textsByClass(html: string, tag: string, className: string) {
+  const matcher = new RegExp(`<${tag}[^>]*class=["'][^"']*\\b${escapeRegex(className)}\\b[^"']*["'][^>]*>([\\s\\S]*?)<\\/${tag}>`, "gi");
+  return [...html.matchAll(matcher)].map((match) => stripTags(match[1])).filter(Boolean);
+}
+
+function firstTextByClass(html: string, tag: string, className: string) {
+  return textsByClass(html, tag, className)[0];
+}
+
+function extractRecipeCard(html: string, url: URL): Omit<Recipe, "id"> | undefined {
+  const name = firstTextByClass(html, "h2", "wprm-recipe-name") ?? firstTextByClass(html, "h1", "wprm-recipe-name");
+  const description = firstTextByClass(html, "div", "wprm-recipe-summary") ?? `Imported from ${url.hostname}`;
+  const ingredients = textsByClass(html, "li", "wprm-recipe-ingredient").slice(0, 80);
+  const steps = textsByClass(html, "li", "wprm-recipe-instruction").slice(0, 80);
+
+  if (!name || ingredients.length === 0 || steps.length === 0) return undefined;
+
+  return {
+    name,
+    description,
+    sourceUrl: url.toString(),
+    ingredients,
+    ingredientsHu: [],
+    time: "30 min",
+    difficulty: "Easy",
+    tags: ["Imported"],
+    tagsHu: [],
+    steps,
+    stepsHu: [],
+  };
+}
+
 export async function importRecipeFromUrl(value: string): Promise<Omit<Recipe, "id">> {
   const url = assertPublicRecipeUrl(value);
   const controller = new AbortController();
@@ -137,17 +178,22 @@ export async function importRecipeFromUrl(value: string): Promise<Omit<Recipe, "
   if (!response.ok) throw new Error("Could not open that recipe page.");
   const html = (await response.text()).slice(0, maxHtmlBytes);
   const recipe = extractRecipe(html);
-  if (!recipe) throw new Error("No recipe data was found on that page.");
+  const recipeCard = recipe ? undefined : extractRecipeCard(html, url);
+  if (!recipe && !recipeCard) throw new Error("No recipe data was found on that page.");
 
-  const name = asString(recipe.name) ?? firstMeta(html, [/<title[^>]*>([\s\S]*?)<\/title>/i]) ?? "Imported recipe";
-  const description = asString(recipe.description) ?? `Imported from ${url.hostname}`;
-  const ingredients = asStringArray(recipe.recipeIngredient).slice(0, 80);
-  const steps = mapInstructions(recipe.recipeInstructions).slice(0, 80);
+  if (recipeCard) return recipeCard;
+  const structuredRecipe = recipe;
+  if (!structuredRecipe) throw new Error("No recipe data was found on that page.");
+
+  const name = asString(structuredRecipe.name) ?? firstMeta(html, [/<title[^>]*>([\s\S]*?)<\/title>/i]) ?? "Imported recipe";
+  const description = asString(structuredRecipe.description) ?? `Imported from ${url.hostname}`;
+  const ingredients = asStringArray(structuredRecipe.recipeIngredient).slice(0, 80);
+  const steps = mapInstructions(structuredRecipe.recipeInstructions).slice(0, 80);
   if (ingredients.length === 0 || steps.length === 0) throw new Error("That page did not include enough recipe detail to import.");
 
   const tags = [
-    ...asStringArray(recipe.recipeCategory),
-    ...asStringArray(recipe.recipeCuisine),
+    ...asStringArray(structuredRecipe.recipeCategory),
+    ...asStringArray(structuredRecipe.recipeCuisine),
     "Imported",
   ].slice(0, 8);
 
@@ -157,7 +203,7 @@ export async function importRecipeFromUrl(value: string): Promise<Omit<Recipe, "
     sourceUrl: url.toString(),
     ingredients,
     ingredientsHu: [],
-    time: parseDuration(asString(recipe.totalTime) ?? asString(recipe.cookTime) ?? asString(recipe.prepTime)),
+    time: parseDuration(asString(structuredRecipe.totalTime) ?? asString(structuredRecipe.cookTime) ?? asString(structuredRecipe.prepTime)),
     difficulty: "Easy",
     tags,
     tagsHu: [],

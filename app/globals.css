@@ -250,6 +250,8 @@ button, input, select { letter-spacing: inherit; }
 .recipe-language-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
 .recipe-language-grid section { display: grid; gap: 12px; align-content: start; }
 .language-label { border-bottom: 2px solid var(--sage); color: var(--sage-deep); font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; padding-bottom: 8px; }
+.language-label span { color: var(--muted); font-size: 9px; font-weight: 700; letter-spacing: .08em; margin-left: 6px; }
+.form-error { margin: -8px 0 18px; border: 1px solid #f0d4c2; border-radius: 8px; background: #fff6ef; color: #a4582b; padding: 10px 12px; font-size: 12px; font-weight: 700; }
 .recipe-language-grid label, .recipe-shared-fields label { display: grid; gap: 6px; color: var(--muted); font-size: 11px; font-weight: 700; }
 .recipe-import-box { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 16px 0; margin-bottom: 22px; }
 .recipe-import-box label { display: grid; gap: 6px; color: var(--muted); font-size: 11px; font-weight: 700; }
