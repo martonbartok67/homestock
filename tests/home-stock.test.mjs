@@ -15,10 +15,24 @@ import { importRecipeFromUrl } from "../lib/server/recipe-importer.ts";
 import { getPersonalGreeting } from "../lib/welcome.ts";
 
 test("welcome greetings match each household member", () => {
-  assert.equal(getPersonalGreeting(9, { name: "Lizi", tone: "sunshine" }), "Hey, good morning sunshine, Lizi");
-  assert.equal(getPersonalGreeting(15, { name: "Emma", tone: "sunshine" }), "Hey, good afternoon sunshine, Emma");
-  assert.equal(getPersonalGreeting(9, { name: "Frici", tone: "asshole" }), "Hey, asshole");
-  assert.equal(getPersonalGreeting(9, { name: "Marci", tone: "unc" }), "Hey, unc");
+  for (const name of ["Lizi", "Emma"]) {
+    const greetings = new Set(Array.from(
+      { length: 24 },
+      (_, hour) => getPersonalGreeting(hour, { name, tone: "sunshine" }),
+    ));
+    for (const word of ["cutie", "beautiful", "beauty", "sexy", "gorgeous", "lovely", "sunshine"]) {
+      assert.ok(greetings.has(`Hey, ${word}, ${name}`));
+    }
+    assert.ok([...greetings].some((greeting) => greeting.includes("good ")));
+  }
+  const sharedRoasts = ["Hey, asshole", "Hey, dumbass", "Morning, menace", "Hey, gremlin", "What’s up, clown", "Hey, disaster", "Morning, troublemaker", "Look who’s awake", "Hey, unc", "Morning, fossil", "Hey, old man", "What’s up, dinosaur", "Hey, grandpa", "Morning, ancient one", "Hey, relic", "Look who survived another day"];
+  for (const profile of [{ name: "Frici", tone: "asshole" }, { name: "Marci", tone: "unc" }]) {
+    const greetings = new Set(Array.from(
+      { length: 24 },
+      (_, hour) => getPersonalGreeting(hour, profile),
+    ));
+    for (const greeting of sharedRoasts) assert.ok(greetings.has(greeting));
+  }
   assert.equal(getPersonalGreeting(23, null), "Good night");
 });
 
