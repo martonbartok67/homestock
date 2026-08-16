@@ -30,6 +30,7 @@ export type Recipe = {
   nameHu?: string;
   description: string;
   descriptionHu?: string;
+  sourceUrl?: string;
   ingredients: string[];
   ingredientsHu?: string[];
   time: string;

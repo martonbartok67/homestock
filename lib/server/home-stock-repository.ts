@@ -18,7 +18,7 @@ const schemaStatements = [
   `CREATE INDEX IF NOT EXISTS inventory_items_expiry_idx ON inventory_items (expiry)`,
   `CREATE TABLE IF NOT EXISTS shopping_list_items (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, quantity TEXT NOT NULL DEFAULT '1', category TEXT NOT NULL, checked INTEGER NOT NULL DEFAULT 0, note TEXT, source TEXT NOT NULL DEFAULT 'manual', created_at TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS shopping_list_items_checked_idx ON shopping_list_items (checked)`,
-  `CREATE TABLE IF NOT EXISTS recipes (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, name_hu TEXT, description TEXT NOT NULL, description_hu TEXT, time TEXT NOT NULL, difficulty TEXT NOT NULL, tags TEXT NOT NULL DEFAULT '[]', tags_hu TEXT NOT NULL DEFAULT '[]', steps TEXT NOT NULL DEFAULT '[]', steps_hu TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS recipes (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, name_hu TEXT, description TEXT NOT NULL, description_hu TEXT, source_url TEXT, time TEXT NOT NULL, difficulty TEXT NOT NULL, tags TEXT NOT NULL DEFAULT '[]', tags_hu TEXT NOT NULL DEFAULT '[]', steps TEXT NOT NULL DEFAULT '[]', steps_hu TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS recipe_ingredients (id TEXT PRIMARY KEY NOT NULL, recipe_id TEXT NOT NULL, ingredient_name TEXT NOT NULL, ingredient_name_hu TEXT, sort_order INTEGER NOT NULL DEFAULT 0)`,
   `CREATE INDEX IF NOT EXISTS recipe_ingredients_recipe_idx ON recipe_ingredients (recipe_id)`,
   `CREATE TABLE IF NOT EXISTS user_preferences (id TEXT PRIMARY KEY NOT NULL, workspace_name TEXT NOT NULL DEFAULT 'Emma & Marci''s household', created_at TEXT NOT NULL)`,
@@ -49,6 +49,7 @@ async function ensureRecipeLanguageColumns() {
   const statements: string[] = [];
   if (!recipeColumns.has("name_hu")) statements.push("ALTER TABLE recipes ADD COLUMN name_hu TEXT");
   if (!recipeColumns.has("description_hu")) statements.push("ALTER TABLE recipes ADD COLUMN description_hu TEXT");
+  if (!recipeColumns.has("source_url")) statements.push("ALTER TABLE recipes ADD COLUMN source_url TEXT");
   if (!recipeColumns.has("tags_hu")) statements.push("ALTER TABLE recipes ADD COLUMN tags_hu TEXT NOT NULL DEFAULT '[]'");
   if (!recipeColumns.has("steps_hu")) statements.push("ALTER TABLE recipes ADD COLUMN steps_hu TEXT NOT NULL DEFAULT '[]'");
   if (!ingredientColumns.has("ingredient_name_hu")) statements.push("ALTER TABLE recipe_ingredients ADD COLUMN ingredient_name_hu TEXT");
@@ -106,6 +107,7 @@ export async function getSnapshot() {
     nameHu: recipe.nameHu ?? undefined,
     description: recipe.description,
     descriptionHu: recipe.descriptionHu ?? undefined,
+    sourceUrl: recipe.sourceUrl ?? undefined,
     time: recipe.time,
     difficulty: recipe.difficulty as Recipe["difficulty"],
     tags: safeJson<string[]>(recipe.tags, []),
@@ -230,6 +232,7 @@ export async function addRecipe(recipe: Omit<Recipe, "id">) {
     nameHu: recipe.nameHu ?? null,
     description: recipe.description,
     descriptionHu: recipe.descriptionHu ?? null,
+    sourceUrl: recipe.sourceUrl ?? null,
     time: recipe.time,
     difficulty: recipe.difficulty,
     tags: JSON.stringify(recipe.tags),
