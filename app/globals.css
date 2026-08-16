@@ -699,6 +699,8 @@ body { background: var(--paper); }
 .settings-button.active, .settings-button:hover { background: #e1e9e1; color: var(--sage-deep); }
 .topbar-actions .icon-button { display: grid; place-items: center; }
 .sidebar-bottom { gap: 0; }
+.app-mark { background: #eef8ff; border: 1px solid #d7efff; transform: none; box-shadow: 0 8px 20px #0c79d81a; }
+.app-mark img { display: block; width: 24px; height: 24px; }
 
 @media (max-width: 760px) {
   .recipe-heading-actions { align-items: flex-end; gap: 8px; }

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import {
   categories,
@@ -53,7 +54,7 @@ function IconButton({ label, children, onClick, className = "" }: { label: strin
 }
 
 function AppMark() {
-  return <div className="app-mark" aria-hidden="true"><span>⌂</span></div>;
+  return <div className="app-mark" aria-hidden="true"><Image src="/favicon.svg" alt="" width={24} height={24} priority /></div>;
 }
 
 function StatusPill({ status }: { status: ReturnType<typeof getExpiryStatus> }) {
