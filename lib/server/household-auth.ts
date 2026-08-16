@@ -1,6 +1,14 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
+import type { WelcomeProfile } from "../welcome";
 import { getHouseholdForEmail } from "./home-stock-repository";
+
+const welcomeProfilesByEmail: Record<string, WelcomeProfile> = {
+  "balint.aliz.eszter@gmail.com": { name: "Lizi", tone: "sunshine" },
+  "horvathemmalola@gmail.com": { name: "Emma", tone: "sunshine" },
+  "frigyes.o.endersz@gmail.com": { name: "Frici", tone: "asshole" },
+  "marcibartok07@gmail.com": { name: "Marci", tone: "unc" },
+};
 
 export class HouseholdAccessError extends Error {
   constructor(
@@ -42,7 +50,11 @@ export async function requireHousehold() {
     );
   }
 
-  return { userId, householdId: household.id, household };
+  const welcomeProfile = welcomeProfilesByEmail[
+    emailAddress.emailAddress.trim().toLowerCase()
+  ] ?? null;
+
+  return { userId, householdId: household.id, household, welcomeProfile };
 }
 
 export function householdAccessResponse(error: unknown) {

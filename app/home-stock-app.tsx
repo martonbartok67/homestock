@@ -17,6 +17,7 @@ import {
   ShoppingListItem,
   Category,
 } from "../lib/homestock";
+import { getPersonalGreeting, type WelcomeProfile } from "../lib/welcome";
 
 type View = "dashboard" | "inventory" | "expiring" | "shopping" | "recipes" | "settings";
 type RecipeMode = "use-soon" | "use-what-i-have" | "minimal-shopping";
@@ -146,15 +147,7 @@ function EmptyState({ title, body, action }: { title: string; body: string; acti
   return <div className="empty-state"><div className="empty-icon">⌁</div><strong>{title}</strong><p>{body}</p>{action}</div>;
 }
 
-function getGreeting(hour: number) {
-  if (hour < 5) return "Good night";
-  if (hour < 12) return "Good morning";
-  if (hour < 18) return "Good afternoon";
-  if (hour < 22) return "Good evening";
-  return "Good night";
-}
-
-function useCurrentGreeting() {
+function useCurrentGreeting(profile: WelcomeProfile | null) {
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -166,7 +159,7 @@ function useCurrentGreeting() {
 
   return {
     dateLabel: new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(now),
-    greeting: getGreeting(now.getHours()),
+    greeting: getPersonalGreeting(now.getHours(), profile),
   };
 }
 
@@ -187,13 +180,14 @@ export default function Home() {
   const [toast, setToast] = useState("");
   const [recipeList, setRecipeList] = useState<Recipe[]>([]);
   const [household, setHousehold] = useState<HouseholdSummary | null>(null);
+  const [welcomeProfile, setWelcomeProfile] = useState<WelcomeProfile | null>(null);
   const [householdLoadStatus, setHouseholdLoadStatus] = useState<HouseholdLoadStatus>("loading");
   const [suggestedRecipe, setSuggestedRecipe] = useState<Recipe | null>(null);
   const [suggestionSource, setSuggestionSource] = useState<RecipeSuggestionSource | null>(null);
   const [suggestionStatus, setSuggestionStatus] = useState("");
   const [isSuggestingRecipe, setIsSuggestingRecipe] = useState(false);
   const toastTimer = useRef<number | undefined>(undefined);
-  const greeting = useCurrentGreeting();
+  const greeting = useCurrentGreeting(welcomeProfile);
 
   const notify = useCallback((message: string) => {
     setToast(message);
@@ -233,7 +227,7 @@ export default function Home() {
     let active = true;
     void householdFetch("/api/home-stock")
       .then(async (response) => {
-        const snapshot = await response.json() as { household?: HouseholdSummary; inventory?: InventoryItem[]; shopping?: ShoppingListItem[]; recipes?: Recipe[]; code?: string };
+        const snapshot = await response.json() as { household?: HouseholdSummary; welcomeProfile?: WelcomeProfile | null; inventory?: InventoryItem[]; shopping?: ShoppingListItem[]; recipes?: Recipe[]; code?: string };
         if (response.status === 403 && snapshot.code === "HOUSEHOLD_REQUIRED") {
           if (active) setHouseholdLoadStatus("unassigned");
           return;
@@ -244,6 +238,7 @@ export default function Home() {
         setShopping(snapshot.shopping);
         setRecipeList(snapshot.recipes);
         setHousehold(snapshot.household ?? null);
+        setWelcomeProfile(snapshot.welcomeProfile ?? null);
         setHouseholdLoadStatus("ready");
       })
       .catch(() => {

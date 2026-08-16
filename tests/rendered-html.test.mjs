@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("HomeStock is wired to the Turso-backed API", async () => {
-  const [page, pageGuard, route, inputValidation, repository, householdAuth, importRoute, importer, suggestRoute, suggestionHelper, schema, packageJson, nextConfig, proxy, layout] = await Promise.all([
+  const [page, pageGuard, route, inputValidation, repository, householdAuth, importRoute, importer, suggestRoute, suggestionHelper, welcomeHelper, schema, packageJson, nextConfig, proxy, layout] = await Promise.all([
     readFile(new URL("../app/home-stock-app.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/home-stock/route.ts", import.meta.url), "utf8"),
@@ -14,6 +14,7 @@ test("HomeStock is wired to the Turso-backed API", async () => {
     readFile(new URL("../lib/server/recipe-importer.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/recipes/suggest/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/server/online-recipe-suggestion.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/welcome.ts", import.meta.url), "utf8"),
     readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
     readFile(new URL("../next.config.ts", import.meta.url), "utf8"),
@@ -33,7 +34,11 @@ test("HomeStock is wired to the Turso-backed API", async () => {
   assert.match(page, /household\.name/);
   assert.doesNotMatch(page, /OrganizationSwitcher/);
   assert.doesNotMatch(page, /OrganizationList/);
-  assert.match(page, /Good afternoon|Good evening|Good morning|Good night/);
+  assert.match(welcomeHelper, /Good afternoon|Good evening|Good morning|Good night/);
+  assert.match(welcomeHelper, /Hey, \$\{timeGreeting\.toLowerCase\(\)\} sunshine, \$\{profile\.name\}/);
+  assert.match(welcomeHelper, /Hey, asshole/);
+  assert.match(welcomeHelper, /Hey, unc/);
+  assert.doesNotMatch(page, /@gmail\.com/);
   assert.match(route, /export async function GET/);
   assert.match(route, /export async function POST/);
   assert.match(route, /updateRecipe/);
@@ -51,6 +56,8 @@ test("HomeStock is wired to the Turso-backed API", async () => {
   assert.match(householdAuth, /await currentUser\(\)/);
   assert.match(householdAuth, /getHouseholdForEmail/);
   assert.match(householdAuth, /HOUSEHOLD_REQUIRED/);
+  assert.match(householdAuth, /welcomeProfilesByEmail/);
+  assert.match(route, /welcomeProfile/);
   assert.match(importRoute, /importRecipeFromUrl/);
   assert.match(importer, /lookup\(host/);
   assert.match(importer, /redirect: "manual"/);

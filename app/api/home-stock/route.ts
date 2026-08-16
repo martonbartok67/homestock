@@ -19,8 +19,9 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const { householdId } = await requireHousehold();
-    return NextResponse.json(await getSnapshot(householdId));
+    const { householdId, welcomeProfile } = await requireHousehold();
+    const snapshot = await getSnapshot(householdId);
+    return NextResponse.json({ ...snapshot, welcomeProfile });
   } catch (error) {
     const accessResponse = householdAccessResponse(error);
     if (accessResponse) return accessResponse;

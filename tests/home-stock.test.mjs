@@ -12,6 +12,15 @@ import {
   RequestValidationError,
 } from "../lib/server/home-stock-input.ts";
 import { importRecipeFromUrl } from "../lib/server/recipe-importer.ts";
+import { getPersonalGreeting } from "../lib/welcome.ts";
+
+test("welcome greetings match each household member", () => {
+  assert.equal(getPersonalGreeting(9, { name: "Lizi", tone: "sunshine" }), "Hey, good morning sunshine, Lizi");
+  assert.equal(getPersonalGreeting(15, { name: "Emma", tone: "sunshine" }), "Hey, good afternoon sunshine, Emma");
+  assert.equal(getPersonalGreeting(9, { name: "Frici", tone: "asshole" }), "Hey, asshole");
+  assert.equal(getPersonalGreeting(9, { name: "Marci", tone: "unc" }), "Hey, unc");
+  assert.equal(getPersonalGreeting(23, null), "Good night");
+});
 
 test("expiry labels use calendar days", () => {
   const reference = new Date(2026, 2, 28, 12);
