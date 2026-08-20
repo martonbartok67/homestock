@@ -140,7 +140,7 @@ function ItemRow({ item, onFinish, onDelete, onEditExpiry, compact = false }: { 
       <span className="item-meta">{item.quantity} {item.unit} · {item.location}</span>
     </div>
     <div className="item-expiry"><StatusPill status={status} /><span>{expiryLabel(item.expiry)}</span><button type="button" className="expiry-edit-button" onClick={(e) => { e.stopPropagation(); onEditExpiry(); }}>{item.expiry ? "Edit date" : "Add date"}</button></div>
-    {!compact && <div className="row-actions"><IconButton label={`Mark ${item.name} finished`} onClick={(e) => { e.stopPropagation(); onFinish(); }}>✓</IconButton><IconButton label={`Delete ${item.name}`} onClick={(e) => { e.stopPropagation(); onDelete(); }}>×</IconButton></div>}
+    {!compact && <div className="row-actions" onClick={(e) => e.stopPropagation()}><IconButton label={`Mark ${item.name} finished`} onClick={onFinish}>✓</IconButton><IconButton label={`Delete ${item.name}`} onClick={onDelete}>×</IconButton></div>}
   </div>;
 }
 
