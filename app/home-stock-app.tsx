@@ -132,14 +132,15 @@ function StatusPill({ status }: { status: ReturnType<typeof getExpiryStatus> }) 
 
 function ItemRow({ item, onFinish, onDelete, onEditExpiry, compact = false }: { item: InventoryItem; onFinish: () => void; onDelete: () => void; onEditExpiry: () => void; compact?: boolean }) {
   const status = getExpiryStatus(item.expiry);
-  return <div className={`item-row ${status} ${compact ? "compact" : ""}`}>
+  const [tapped, setTapped] = useState(false);
+  return <div className={`item-row ${status} ${compact ? "compact" : ""} ${tapped ? "tapped" : ""}`} onClick={() => setTapped((t) => !t)} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setTapped(false); }} tabIndex={-1}>
     <div className={`category-mark category-${item.category.toLowerCase()}`}>{item.category === "Fridge" ? "❄" : item.category === "Pantry" ? "▤" : item.category === "Freezer" ? "◌" : "•"}</div>
     <div className="item-main">
       <div className="item-title-line"><strong>{item.name}</strong>{item.basic && <span className="basic-tag">Basic</span>}</div>
       <span className="item-meta">{item.quantity} {item.unit} · {item.location}</span>
     </div>
-    <div className="item-expiry"><StatusPill status={status} /><span>{expiryLabel(item.expiry)}</span><button type="button" className="expiry-edit-button" onClick={onEditExpiry}>{item.expiry ? "Edit date" : "Add date"}</button></div>
-    {!compact && <div className="row-actions"><IconButton label={`Mark ${item.name} finished`} onClick={onFinish}>✓</IconButton><IconButton label={`Delete ${item.name}`} onClick={onDelete}>×</IconButton></div>}
+    <div className="item-expiry"><StatusPill status={status} /><span>{expiryLabel(item.expiry)}</span><button type="button" className="expiry-edit-button" onClick={(e) => { e.stopPropagation(); onEditExpiry(); }}>{item.expiry ? "Edit date" : "Add date"}</button></div>
+    {!compact && <div className="row-actions"><IconButton label={`Mark ${item.name} finished`} onClick={(e) => { e.stopPropagation(); onFinish(); }}>✓</IconButton><IconButton label={`Delete ${item.name}`} onClick={(e) => { e.stopPropagation(); onDelete(); }}>×</IconButton></div>}
   </div>;
 }
 
