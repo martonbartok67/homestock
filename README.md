@@ -2,6 +2,7 @@
 
 HomeStock is a calm home inventory, expiry tracking, shopping list, and recipe planning app.
 
+ 
 ## Local development
 
 ```bash
