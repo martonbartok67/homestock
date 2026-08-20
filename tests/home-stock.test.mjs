@@ -90,12 +90,35 @@ test("API input accepts one-language recipes and normalizes optional fields", ()
   assert.equal(result.recipe.sourceUrl, undefined);
 });
 
+test("API input accepts clearing or changing an inventory expiry", () => {
+  const withDate = parseHomeStockAction({
+    action: "updateInventoryExpiry",
+    id: "item-1",
+    expiry: "2026-08-25",
+  });
+  assert.equal(withDate.action, "updateInventoryExpiry");
+  assert.equal(withDate.expiry, "2026-08-25");
+
+  const cleared = parseHomeStockAction({
+    action: "updateInventoryExpiry",
+    id: "item-1",
+    expiry: "",
+  });
+  assert.equal(cleared.action, "updateInventoryExpiry");
+  assert.equal(cleared.expiry, undefined);
+});
+
 test("API input rejects malformed or unsafe writes", () => {
   assert.throws(() => parseHomeStockAction({ action: "deleteRecipe" }), RequestValidationError);
   assert.throws(() => parseHomeStockAction({
     action: "addInventory",
     item: { name: "Milk", category: "Fridge", location: "Door", quantity: -1, unit: "bottle", basic: false },
   }), /Quantity/);
+  assert.throws(() => parseHomeStockAction({
+    action: "updateInventoryExpiry",
+    id: "item-1",
+    expiry: "tomorrow",
+  }), /valid date/);
   assert.throws(() => parseHomeStockAction({
     action: "addRecipe",
     recipe: { name: "Soup", description: "Soup", ingredients: ["water"], steps: ["Cook"], time: "10 min", difficulty: "Easy", tags: [], sourceUrl: "javascript:alert(1)" },

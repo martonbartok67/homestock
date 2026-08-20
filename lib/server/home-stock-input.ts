@@ -142,6 +142,7 @@ function recipe(value: unknown): Omit<Recipe, "id"> {
 export type HomeStockAction =
   | { action: "addInventory"; item: Omit<InventoryItem, "id"> }
   | { action: "deleteInventory" | "finishInventory" | "toggleShopping" | "deleteShopping" | "deleteRecipe"; id: string }
+  | { action: "updateInventoryExpiry"; id: string; expiry?: string }
   | { action: "addShopping"; item: Omit<ShoppingListItem, "id" | "checked"> }
   | { action: "addShoppingBatch"; items: Array<Omit<ShoppingListItem, "id" | "checked">> }
   | { action: "addRecipe"; recipe: Omit<Recipe, "id"> }
@@ -156,6 +157,8 @@ export function parseHomeStockAction(value: unknown): HomeStockAction {
     case "toggleShopping":
     case "deleteShopping":
     case "deleteRecipe": return { action: body.action, id: id(body.id) };
+    case "updateInventoryExpiry":
+      return { action: body.action, id: id(body.id), expiry: date(body.expiry, "Expiry date") };
     case "addShopping": return { action: body.action, item: shoppingItem(body.item) };
     case "addShoppingBatch": {
       if (!Array.isArray(body.items) || body.items.length > 80) throw new RequestValidationError("Shopping list batch is invalid.");

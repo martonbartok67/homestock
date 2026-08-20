@@ -716,6 +716,12 @@ body { background: var(--paper); }
 .sidebar-bottom { gap: 0; }
 .app-mark { background: #eef8ff; border: 1px solid #d7efff; transform: none; box-shadow: 0 8px 20px #0c79d81a; }
 .app-mark img { display: block; width: 24px; height: 24px; }
+.item-expiry { display: grid; justify-items: end; gap: 4px; }
+.expiry-edit-button { background: transparent; color: #78947e; font-size: 10px; font-weight: 700; padding: 0; }
+.expiry-edit-button:hover { color: var(--ink); }
+.expiry-form-grid { margin-top: 16px; }
+.modal-actions-split { justify-content: space-between; align-items: center; }
+.modal-actions-split > div { display: flex; gap: 8px; }
 
 @media (max-width: 760px) {
   .recipe-heading-actions { align-items: flex-end; gap: 8px; }
@@ -729,6 +735,9 @@ body { background: var(--paper); }
   .recipe-form-modal { width: calc(100vw - 24px); max-height: calc(100vh - 24px); padding: 17px; }
   .recipe-language-grid { grid-template-columns: 1fr; gap: 24px; }
   .recipe-shared-fields { max-width: none; }
+  .expiry-edit-button { font-size: 9px; }
+  .modal-actions-split { align-items: stretch; flex-direction: column; }
+  .modal-actions-split > div { justify-content: flex-end; }
 }
 
 /* Recipe modal text layout correction. Keep bilingual copy out of the step-number column. */

@@ -307,6 +307,25 @@ export async function deleteInventoryItem(
   return getSnapshot(householdId);
 }
 
+export async function updateInventoryExpiry(
+  householdId: string,
+  id: string,
+  expiry?: string,
+) {
+  assertHouseholdId(householdId);
+  await ensureDatabase();
+  await getDb()
+    .update(inventoryItems)
+    .set({ expiry: expiry ?? null })
+    .where(
+      and(
+        eq(inventoryItems.id, id),
+        eq(inventoryItems.householdId, householdId),
+      ),
+    );
+  return getSnapshot(householdId);
+}
+
 export async function finishInventoryItem(
   householdId: string,
   id: string,

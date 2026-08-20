@@ -10,6 +10,7 @@ import {
   finishInventoryItem,
   getSnapshot,
   toggleShoppingItem,
+  updateInventoryExpiry,
   updateRecipe,
 } from "../../../lib/server/home-stock-repository";
 import { parseHomeStockAction, RequestValidationError } from "../../../lib/server/home-stock-input";
@@ -41,6 +42,7 @@ export async function POST(request: Request) {
       case "addInventory": snapshot = await addInventoryItem(householdId, body.item); break;
       case "deleteInventory": snapshot = await deleteInventoryItem(householdId, body.id); break;
       case "finishInventory": snapshot = await finishInventoryItem(householdId, body.id); break;
+      case "updateInventoryExpiry": snapshot = await updateInventoryExpiry(householdId, body.id, body.expiry); break;
       case "addShopping": snapshot = await addShoppingItem(householdId, body.item); break;
       case "addShoppingBatch": snapshot = await addShoppingItems(householdId, body.items); break;
       case "addRecipe": snapshot = await addRecipe(householdId, body.recipe); break;
