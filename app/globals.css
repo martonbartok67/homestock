@@ -786,3 +786,23 @@ body { background: var(--paper); }
   .household-gate-note { border-top: 1px solid var(--line); border-left: 0; padding: 30px 6px 0; }
   .account-control { align-items: flex-start; }
 }
+
+/* Mobile UX fixes: nav clearance, toast, modals, tap hints. */
+@media (max-width: 760px) {
+  /* Content must clear the 70px nav bar */
+  .app-shell { padding-bottom: 70px; }
+  .view-content { padding-bottom: 90px; }
+
+  /* Toast sits above nav bar */
+  .toast { bottom: 82px; }
+
+  /* Modals use svh to avoid browser-chrome overflow */
+  .modal-card { max-height: calc(100svh - 40px); }
+  .recipe-form-modal { max-height: calc(100svh - 24px); }
+
+  /* Hint tappability on item rows */
+  .item-row { cursor: pointer; }
+
+  /* Shopping row delete button: larger tap target */
+  .shopping-row .icon-button { width: 36px; height: 36px; font-size: 19px; }
+}
