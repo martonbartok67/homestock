@@ -1,5 +1,4 @@
 import { InventoryItem, matchingIngredients, missingIngredients, Recipe } from "../homestock";
-import { suggestFromMealDB } from "./mealdb";
 
 type GeminiPart = { text?: string };
 type GeminiResponse = {
@@ -186,10 +185,6 @@ export async function suggestRecipeFromInventory({
     if (!quotaBlocked(groundedMessage)) throw new Error(groundedMessage);
     groundingUnavailableUntil = Date.now() + groundingRetryDelayMs;
   }
-
-  // Tier 2: TheMealDB — free, no key, no quota
-  const mealdb = await suggestFromMealDB(ingredients);
-  if (mealdb) return mealdb;
 
   const aiIdeaRequest = {
     contents: [{
