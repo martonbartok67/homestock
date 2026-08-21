@@ -22,7 +22,7 @@ import { getPersonalGreeting, type WelcomeProfile } from "../lib/welcome";
 
 type View = "dashboard" | "inventory" | "expiring" | "shopping" | "recipes" | "settings";
 type RecipeMode = "use-soon" | "use-what-i-have" | "minimal-shopping";
-type RecipeSuggestionSource = "local" | "web" | "ai";
+type RecipeSuggestionSource = "local" | "web" | "mealdb" | "ai";
 type HouseholdSummary = { id: string; name: string; memberCount: number };
 type HouseholdLoadStatus = "loading" | "ready" | "unassigned" | "error";
 
@@ -362,7 +362,7 @@ export default function Home() {
       const recipe = "id" in body.recipe ? body.recipe : { ...body.recipe, id: makeId("web") };
       setSuggestedRecipe(recipe);
       setSuggestionSource(body.source);
-      setSuggestionStatus(body.source === "local" ? "You already have a saved recipe you can make." : body.source === "web" ? "Found a real recipe online with a source link." : "A real web recipe wasn’t available, so this is an AI idea without a source link.");
+      setSuggestionStatus(body.source === "local" ? "You already have a saved recipe you can make." : body.source === "web" ? "Found a real recipe online with a source link." : body.source === "mealdb" ? "Found via TheMealDB — a free community recipe database." : "A real web recipe wasn’t available, so this is an AI idea without a source link.");
     } catch (error) {
       setSuggestedRecipe(null);
       setSuggestionSource(null);
@@ -373,7 +373,7 @@ export default function Home() {
   };
 
   const saveSuggestedRecipe = async () => {
-    if (!suggestedRecipe || (suggestionSource !== "web" && suggestionSource !== "ai")) return;
+    if (!suggestedRecipe || (suggestionSource !== "web" && suggestionSource !== "mealdb" && suggestionSource !== "ai")) return;
     const { id: _id, ...recipe } = suggestedRecipe;
     void _id;
     if (await addRecipe(recipe)) {
@@ -453,6 +453,7 @@ function ShoppingView({ shopping, onToggle, onRemove, onAdd }: { shopping: Shopp
 function ShoppingRow({ item, onToggle, onRemove }: { item: ShoppingListItem; onToggle: () => void; onRemove: () => void }) { return <div className={`shopping-row ${item.checked ? "checked" : ""}`}><button className="check-box" onClick={onToggle} aria-label={item.checked ? `Uncheck ${item.name}` : `Check ${item.name}`}>{item.checked ? "✓" : ""}</button><div><strong>{item.name}</strong><span>{item.quantity} · {item.category}{item.source !== "manual" && <em>{item.source === "recipe" ? "From recipe" : "Restock"}</em>}</span></div><IconButton label={`Remove ${item.name}`} onClick={onRemove}>×</IconButton></div>; }
 
 function recipeDescription(recipe: Recipe, source: RecipeSuggestionSource | null) {
+  if (source === "mealdb") return `${recipe.description}`;
   if (source === "ai") return `${recipe.description} This is an AI idea, not a recipe copied from a website.`;
   return recipe.description;
 }
@@ -478,8 +479,8 @@ function RecipesView({ mode, setMode, typeFilter, setTypeFilter, recipes: recipe
     </div>
     {(suggestionStatus || suggestedRecipe) && <section className="online-suggestion-panel">
       {suggestedRecipe?.thumbUrl && <img className="suggestion-thumb" src={suggestedRecipe.thumbUrl + "/medium"} alt={suggestedRecipe.name} />}
-      <div className="suggestion-body"><span>{suggestionSource === "web" ? "Real online recipe" : suggestionSource === "ai" ? "AI idea" : suggestionSource === "local" ? "Saved recipe match" : "Online recipe search"}</span><strong>{suggestedRecipe?.name ?? suggestionStatus}</strong>{suggestedRecipe && <p>{recipeDescription(suggestedRecipe, suggestionSource)}</p>}{suggestionStatus && suggestedRecipe && <small>{suggestionStatus}</small>}{suggestedRecipe?.sourceUrl && <small>Source: {sourceHostname(suggestedRecipe.sourceUrl)}</small>}</div>
-      {suggestedRecipe && <div className="online-suggestion-actions"><button className="secondary-button" onClick={onOpenSuggestion}>View recipe</button>{(suggestionSource === "web" || suggestionSource === "ai") && <button className="text-button" onClick={onSaveSuggestion}>Save recipe</button>}</div>}
+      <div className="suggestion-body"><span>{suggestionSource === "web" ? "Real online recipe" : suggestionSource === "mealdb" ? "TheMealDB" : suggestionSource === "ai" ? "AI idea" : suggestionSource === "local" ? "Saved recipe match" : "Online recipe search"}</span><strong>{suggestedRecipe?.name ?? suggestionStatus}</strong>{suggestedRecipe && <p>{recipeDescription(suggestedRecipe, suggestionSource)}</p>}{suggestionStatus && suggestedRecipe && <small>{suggestionStatus}</small>}{suggestedRecipe?.sourceUrl && <small>Source: {sourceHostname(suggestedRecipe.sourceUrl)}</small>}</div>
+      {suggestedRecipe && <div className="online-suggestion-actions"><button className="secondary-button" onClick={onOpenSuggestion}>View recipe</button>{(suggestionSource === "web" || suggestionSource === "mealdb" || suggestionSource === "ai") && <button className="text-button" onClick={onSaveSuggestion}>Save recipe</button>}</div>}
     </section>}
     <div className="recipe-controls"><div className="recipe-filter-row">{([["use-soon", "Cook with expiring items"], ["use-what-i-have", "Use what I have"], ["minimal-shopping", "Minimal shopping"]] as [RecipeMode, string][]).map(([id, label]) => <button key={id} className={mode === id ? "active" : ""} onClick={() => setMode(id)}>{label}</button>)}</div><div className="recipe-filter-row"><button className={typeFilter === "All" ? "active" : ""} onClick={() => setTypeFilter("All")}>All</button><button className={typeFilter === "savory" ? "active" : ""} onClick={() => setTypeFilter("savory")}>Savory</button><button className={typeFilter === "sweet" ? "active" : ""} onClick={() => setTypeFilter("sweet")}>Sweet</button></div></div>
     <div className="recipe-grid">{sorted.length ? sorted.map((recipe) => <RecipeCard key={recipe.id} recipe={recipe} inventory={inventory} onOpen={() => onOpen(recipe)} onEdit={() => onEdit(recipe)} onDelete={() => onDelete(recipe)} onAddMissing={() => onAddMissing(recipe)} />) : <EmptyState title={recipeList.length ? "No recipes match this filter" : "No recipes yet"} body={recipeList.length ? "Try a different type filter or add a new recipe." : "Add your own, or load the starter catalog."} action={<div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}><button className="secondary-button" onClick={onAdd}>＋ Add recipe</button>{!recipeList.length && <button className="secondary-button" onClick={onLoadCatalog} disabled={isLoadingCatalog}>{isLoadingCatalog ? "Loading…" : "Load sample recipes"}</button>}</div>} />}</div>
