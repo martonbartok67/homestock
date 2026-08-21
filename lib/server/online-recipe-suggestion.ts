@@ -96,6 +96,7 @@ function normalizeRecipe(value: Record<string, unknown>, options: { fallbackSour
     ingredientsHu: [],
     time: cleanText(value.time, "30 min").slice(0, 40),
     difficulty: cleanText(value.difficulty).toLowerCase().includes("medium") ? "Medium" : "Easy",
+    recipeType: "savory" as const,
     tags: cleanList(value.tags, 6).length ? cleanList(value.tags, 6) : [options.requireSource ? "Online" : "AI idea", "Inventory"],
     tagsHu: [],
     steps,

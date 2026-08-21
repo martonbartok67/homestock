@@ -17,6 +17,7 @@ import {
   ShoppingListItem,
   Category,
 } from "../lib/homestock";
+import { CATALOG } from "../lib/recipe-catalog";
 import { getPersonalGreeting, type WelcomeProfile } from "../lib/welcome";
 
 type View = "dashboard" | "inventory" | "expiring" | "shopping" | "recipes" | "settings";
