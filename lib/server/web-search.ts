@@ -1,0 +1,124 @@
+// Multi-provider recipe web search
+// Tries providers in order; returns the first usable recipe URL found.
+// Set env vars for whichever APIs you have keys for — unset = skipped.
+//   BRAVE_SEARCH_API_KEY   — https://api.search.brave.com (2,000 req/month free)
+//   TAVILY_API_KEY         — https://tavily.com           (1,000 req/month free)
+//   SERP_API_KEY           — https://serpapi.com          (100 req/month free)
+// DuckDuckGo: no key needed, used as last resort (unofficial, rate-limited)
+
+const TIMEOUT_MS = 8_000;
+
+async function timedFetch(url: string, init: RequestInit = {}): Promise<Response | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function isLikelyRecipeUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    if (!["http:", "https:"].includes(u.protocol)) return false;
+    // Skip aggregators, ads, social, video
+    const blocked = ["youtube.com", "facebook.com", "instagram.com", "tiktok.com",
+      "pinterest.com", "twitter.com", "reddit.com", "amazon.com", "google.com"];
+    if (blocked.some((b) => u.hostname.includes(b))) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function pickBestUrl(urls: string[]): string | null {
+  return urls.find(isLikelyRecipeUrl) ?? null;
+}
+
+async function searchBrave(query: string): Promise<string | null> {
+  const key = process.env.BRAVE_SEARCH_API_KEY;
+  if (!key) return null;
+  const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5&result_filter=web`;
+  const res = await timedFetch(url, {
+    headers: { "Accept": "application/json", "X-Subscription-Token": key },
+  });
+  if (!res?.ok) return null;
+  const data = await res.json().catch(() => null) as {
+    web?: { results?: Array<{ url?: string }> };
+  } | null;
+  const urls = data?.web?.results?.map((r) => r.url ?? "").filter(Boolean) ?? [];
+  return pickBestUrl(urls);
+}
+
+async function searchTavily(query: string): Promise<string | null> {
+  const key = process.env.TAVILY_API_KEY;
+  if (!key) return null;
+  const res = await timedFetch("https://api.tavily.com/search", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      api_key: key,
+      query,
+      search_depth: "basic",
+      max_results: 5,
+      include_answer: false,
+      include_raw_content: false,
+    }),
+  });
+  if (!res?.ok) return null;
+  const data = await res.json().catch(() => null) as {
+    results?: Array<{ url?: string }>;
+  } | null;
+  const urls = data?.results?.map((r) => r.url ?? "").filter(Boolean) ?? [];
+  return pickBestUrl(urls);
+}
+
+async function searchSerp(query: string): Promise<string | null> {
+  const key = process.env.SERP_API_KEY;
+  if (!key) return null;
+  const url = `https://serpapi.com/search.json?q=${encodeURIComponent(query)}&num=5&api_key=${key}`;
+  const res = await timedFetch(url);
+  if (!res?.ok) return null;
+  const data = await res.json().catch(() => null) as {
+    organic_results?: Array<{ link?: string }>;
+  } | null;
+  const urls = data?.organic_results?.map((r) => r.link ?? "").filter(Boolean) ?? [];
+  return pickBestUrl(urls);
+}
+
+async function searchDuckDuckGo(query: string): Promise<string | null> {
+  // Unofficial HTML scrape — last resort, no key needed
+  const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+  const res = await timedFetch(url, {
+    headers: { "User-Agent": "Mozilla/5.0 (compatible; HomeStock/1.0)" },
+  });
+  if (!res?.ok) return null;
+  const html = await res.text().catch(() => "");
+  // Extract result URLs from DDG's redirect links
+  const matches = [...html.matchAll(/uddg=([^"&]+)/g)]
+    .map((m) => { try { return decodeURIComponent(m[1]); } catch { return ""; } })
+    .filter(Boolean);
+  return pickBestUrl(matches);
+}
+
+/**
+ * Search for a recipe URL using available search APIs.
+ * Tries: Brave → Tavily → SerpAPI → DuckDuckGo
+ * Returns the first usable URL found, or null if all fail.
+ */
+export async function searchRecipeUrl(
+  ingredients: string[],
+): Promise<string | null> {
+  const query = `recipe using ${ingredients.slice(0, 5).join(", ")} dinner`;
+
+  // Run all available providers concurrently — use the first result that comes back
+  const providers = [searchBrave, searchTavily, searchSerp, searchDuckDuckGo];
+  for (const provider of providers) {
+    const url = await provider(query);
+    if (url) return url;
+  }
+  return null;
+}
