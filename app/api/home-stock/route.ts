@@ -11,6 +11,7 @@ import {
   getSnapshot,
   toggleShoppingItem,
   updateInventoryExpiry,
+  updateInventoryItem,
   updateRecipe,
 } from "../../../lib/server/home-stock-repository";
 import { parseHomeStockAction, RequestValidationError } from "../../../lib/server/home-stock-input";
@@ -40,6 +41,7 @@ export async function POST(request: Request) {
     let snapshot;
     switch (body.action) {
       case "addInventory": snapshot = await addInventoryItem(householdId, body.item); break;
+      case "updateInventory": snapshot = await updateInventoryItem(householdId, body.id, body.item); break;
       case "deleteInventory": snapshot = await deleteInventoryItem(householdId, body.id); break;
       case "finishInventory": snapshot = await finishInventoryItem(householdId, body.id); break;
       case "updateInventoryExpiry": snapshot = await updateInventoryExpiry(householdId, body.id, body.expiry); break;

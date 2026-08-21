@@ -19,7 +19,7 @@ const schemaStatements = [
   `CREATE TABLE IF NOT EXISTS household_members (id TEXT PRIMARY KEY NOT NULL, household_id TEXT NOT NULL, email TEXT NOT NULL, created_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS inventory_items (id TEXT PRIMARY KEY NOT NULL, household_id TEXT NOT NULL, name TEXT NOT NULL, category TEXT NOT NULL, location TEXT NOT NULL, quantity INTEGER NOT NULL DEFAULT 1, unit TEXT NOT NULL, expiry TEXT, purchase_date TEXT, notes TEXT, basic INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS shopping_list_items (id TEXT PRIMARY KEY NOT NULL, household_id TEXT NOT NULL, name TEXT NOT NULL, quantity TEXT NOT NULL DEFAULT '1', category TEXT NOT NULL, checked INTEGER NOT NULL DEFAULT 0, note TEXT, source TEXT NOT NULL DEFAULT 'manual', created_at TEXT NOT NULL)`,
-  `CREATE TABLE IF NOT EXISTS recipes (id TEXT PRIMARY KEY NOT NULL, household_id TEXT NOT NULL, name TEXT NOT NULL, name_hu TEXT, description TEXT NOT NULL, description_hu TEXT, source_url TEXT, time TEXT NOT NULL, difficulty TEXT NOT NULL, tags TEXT NOT NULL DEFAULT '[]', tags_hu TEXT NOT NULL DEFAULT '[]', steps TEXT NOT NULL DEFAULT '[]', steps_hu TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS recipes (id TEXT PRIMARY KEY NOT NULL, household_id TEXT NOT NULL, name TEXT NOT NULL, name_hu TEXT, description TEXT NOT NULL, description_hu TEXT, source_url TEXT, time TEXT NOT NULL, difficulty TEXT NOT NULL, recipe_type TEXT NOT NULL DEFAULT 'savory', tags TEXT NOT NULL DEFAULT '[]', tags_hu TEXT NOT NULL DEFAULT '[]', steps TEXT NOT NULL DEFAULT '[]', steps_hu TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS recipe_ingredients (id TEXT PRIMARY KEY NOT NULL, household_id TEXT NOT NULL, recipe_id TEXT NOT NULL, ingredient_name TEXT NOT NULL, ingredient_name_hu TEXT, sort_order INTEGER NOT NULL DEFAULT 0)`,
   `CREATE TABLE IF NOT EXISTS user_preferences (id TEXT PRIMARY KEY NOT NULL, household_id TEXT NOT NULL, workspace_name TEXT NOT NULL DEFAULT 'Household', created_at TEXT NOT NULL)`,
 ];
@@ -106,6 +106,11 @@ async function ensureCurrentColumns() {
   if (!recipeColumns.has("steps_hu")) {
     statements.push(
       "ALTER TABLE recipes ADD COLUMN steps_hu TEXT NOT NULL DEFAULT '[]'",
+    );
+  }
+  if (!recipeColumns.has("recipe_type")) {
+    statements.push(
+      "ALTER TABLE recipes ADD COLUMN recipe_type TEXT NOT NULL DEFAULT 'savory'",
     );
   }
   if (!ingredientColumns.has("ingredient_name_hu")) {
@@ -243,6 +248,7 @@ export async function getSnapshot(householdId: string) {
       sourceUrl: recipe.sourceUrl ?? undefined,
       time: recipe.time,
       difficulty: recipe.difficulty as Recipe["difficulty"],
+      recipeType: (recipe.recipeType ?? "savory") as Recipe["recipeType"],
       tags: safeJson<string[]>(recipe.tags, []),
       tagsHu: safeJson<string[]>(recipe.tagsHu ?? "[]", []),
       steps: safeJson<string[]>(recipe.steps, []),
@@ -287,6 +293,35 @@ export async function addInventoryItem(
     basic: item.basic,
     createdAt: now(),
   });
+  return getSnapshot(householdId);
+}
+
+export async function updateInventoryItem(
+  householdId: string,
+  id: string,
+  item: Omit<InventoryItem, "id">,
+) {
+  assertHouseholdId(householdId);
+  await ensureDatabase();
+  await getDb()
+    .update(inventoryItems)
+    .set({
+      name: item.name,
+      category: item.category,
+      location: item.location,
+      quantity: item.quantity,
+      unit: item.unit,
+      expiry: item.expiry ?? null,
+      purchaseDate: item.purchaseDate ?? null,
+      notes: item.notes ?? null,
+      basic: item.basic,
+    })
+    .where(
+      and(
+        eq(inventoryItems.id, id),
+        eq(inventoryItems.householdId, householdId),
+      ),
+    );
   return getSnapshot(householdId);
 }
 
@@ -500,6 +535,7 @@ export async function addRecipe(
       sourceUrl: recipe.sourceUrl ?? null,
       time: recipe.time,
       difficulty: recipe.difficulty,
+      recipeType: recipe.recipeType,
       tags: JSON.stringify(recipe.tags),
       tagsHu: JSON.stringify(recipe.tagsHu ?? []),
       steps: JSON.stringify(recipe.steps),
@@ -552,6 +588,7 @@ export async function updateRecipe(
         sourceUrl: recipe.sourceUrl ?? null,
         time: recipe.time,
         difficulty: recipe.difficulty,
+        recipeType: recipe.recipeType,
         tags: JSON.stringify(recipe.tags),
         tagsHu: JSON.stringify(recipe.tagsHu ?? []),
         steps: JSON.stringify(recipe.steps),

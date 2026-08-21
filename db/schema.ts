@@ -74,6 +74,7 @@ export const recipes = sqliteTable(
     sourceUrl: text("source_url"),
     time: text("time").notNull(),
     difficulty: text("difficulty").notNull(),
+    recipeType: text("recipe_type").notNull().default("savory"),
     tags: text("tags").notNull().default("[]"),
     tagsHu: text("tags_hu").notNull().default("[]"),
     steps: text("steps").notNull().default("[]"),

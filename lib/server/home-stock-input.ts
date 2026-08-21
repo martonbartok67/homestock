@@ -9,7 +9,8 @@ type InputRecord = Record<string, unknown>;
 
 const categories = new Set<Category>(["Fridge", "Freezer", "Pantry", "Household", "Bathroom", "Cleaning"]);
 const shoppingSources = new Set<ShoppingListItem["source"]>(["manual", "inventory", "recipe"]);
-const difficulties = new Set<Recipe["difficulty"]>(["Easy", "Medium"]);
+const difficulties = new Set<Recipe["difficulty"]>(["Easy", "Medium", "Hard"]);
+const recipeTypes = new Set<Recipe["recipeType"]>(["savory", "sweet"]);
 
 export class RequestValidationError extends Error {}
 
@@ -122,6 +123,9 @@ function recipe(value: unknown): Omit<Recipe, "id"> {
   if (typeof input.difficulty !== "string" || !difficulties.has(input.difficulty as Recipe["difficulty"])) {
     throw new RequestValidationError("Choose a valid recipe difficulty.");
   }
+  if (typeof input.recipeType !== "string" || !recipeTypes.has(input.recipeType as Recipe["recipeType"])) {
+    throw new RequestValidationError("Recipe type must be savory or sweet.");
+  }
   return {
     name: text(input.name, "Recipe name", 200),
     nameHu: optionalText(input.nameHu, "Hungarian recipe name", 200),
@@ -132,6 +136,7 @@ function recipe(value: unknown): Omit<Recipe, "id"> {
     ingredientsHu: stringList(input.ingredientsHu, "Hungarian ingredients", { maxItems: 80, maxLength: 300 }),
     time: text(input.time, "Recipe time", 40, "30 min"),
     difficulty: input.difficulty as Recipe["difficulty"],
+    recipeType: input.recipeType as Recipe["recipeType"],
     tags: stringList(input.tags, "Tags", { maxItems: 8, maxLength: 60 }),
     tagsHu: stringList(input.tagsHu, "Hungarian tags", { maxItems: 8, maxLength: 60 }),
     steps: stringList(input.steps, "Recipe steps", { maxItems: 80, maxLength: 1_500, required: true }),
@@ -145,6 +150,7 @@ export type HomeStockAction =
   | { action: "updateInventoryExpiry"; id: string; expiry?: string }
   | { action: "addShopping"; item: Omit<ShoppingListItem, "id" | "checked"> }
   | { action: "addShoppingBatch"; items: Array<Omit<ShoppingListItem, "id" | "checked">> }
+  | { action: "updateInventory"; id: string; item: Omit<InventoryItem, "id"> }
   | { action: "addRecipe"; recipe: Omit<Recipe, "id"> }
   | { action: "updateRecipe"; id: string; recipe: Omit<Recipe, "id"> };
 
@@ -164,6 +170,7 @@ export function parseHomeStockAction(value: unknown): HomeStockAction {
       if (!Array.isArray(body.items) || body.items.length > 80) throw new RequestValidationError("Shopping list batch is invalid.");
       return { action: body.action, items: body.items.map(shoppingItem) };
     }
+    case "updateInventory": return { action: body.action, id: id(body.id), item: inventoryItem(body.item) };
     case "addRecipe": return { action: body.action, recipe: recipe(body.recipe) };
     case "updateRecipe": return { action: body.action, id: id(body.id), recipe: recipe(body.recipe) };
     default: throw new RequestValidationError("Unknown HomeStock action.");

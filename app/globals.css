@@ -806,3 +806,9 @@ body { background: var(--paper); }
   /* Shopping row delete button: larger tap target */
   .shopping-row .icon-button { width: 36px; height: 36px; font-size: 19px; }
 }
+
+/* Recipe type filter tabs */
+.type-filter-tabs { display: flex; gap: 6px; padding-bottom: 18px; }
+.type-filter-tabs button { white-space: nowrap; padding: 7px 12px; background: #eef2ed; color: #84928a; border-radius: 7px; font-size: 11px; font-weight: 600; }
+.type-filter-tabs button.active { background: var(--sage-deep); color: white; }
+@media (max-width: 760px) { .type-filter-tabs { overflow-x: auto; } .type-filter-tabs button { font-size: 10px; } }

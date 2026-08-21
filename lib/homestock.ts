@@ -34,12 +34,19 @@ export type Recipe = {
   ingredients: string[];
   ingredientsHu?: string[];
   time: string;
-  difficulty: "Easy" | "Medium";
+  difficulty: "Easy" | "Medium" | "Hard";
   tags: string[];
   tagsHu?: string[];
   steps: string[];
   stepsHu?: string[];
+  recipeType: "savory" | "sweet";
 };
+
+// Common staples assumed always available — not shown as missing
+export const STAPLES = new Set([
+  "salt", "black pepper", "pepper", "water", "oil", "olive oil", "vegetable oil",
+  "salt and black pepper", "salt and pepper",
+]);
 
 export const categories: Category[] = ["Fridge", "Freezer", "Pantry", "Household", "Bathroom", "Cleaning"];
 
@@ -76,7 +83,12 @@ export function formatDate(date?: string): string {
 
 export function matchingIngredients(recipe: Recipe, inventory: InventoryItem[]): string[] {
   const available = inventory.filter((item) => item.quantity > 0).map((item) => item.name.toLowerCase());
-  return recipe.ingredients.filter((ingredient) => available.some((item) => item.includes(ingredient.toLowerCase()) || ingredient.toLowerCase().includes(item)));
+  return recipe.ingredients.filter((ingredient) => {
+    const ing = ingredient.toLowerCase();
+    if (STAPLES.has(ing)) return true;
+    for (const staple of STAPLES) { if (ing.includes(staple)) return true; }
+    return available.some((item) => item.includes(ing) || ing.includes(item));
+  });
 }
 
 export function missingIngredients(recipe: Recipe, inventory: InventoryItem[]): string[] {
