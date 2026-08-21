@@ -1,5 +1,5 @@
 // TheMealDB free API — no key required, no quota
-// Docs: https://www.themealdb.com/api.php
+// Free key: "1" | Docs: https://www.themealdb.com/api.php
 
 import type { Recipe } from "../homestock";
 
@@ -13,16 +13,17 @@ type MealDetail = {
   strCategory: string;
   strArea: string;
   strInstructions: string;
+  strMealThumb: string | null;
   strTags: string | null;
   strSource: string | null;
   [key: string]: string | null;
 };
 
-async function mealdbFetch<T>(url: string): Promise<T | null> {
+async function mealdbGet<T>(path: string): Promise<T | null> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(url, { signal: controller.signal });
+    const res = await fetch(`${BASE}${path}`, { signal: controller.signal });
     if (!res.ok) return null;
     const data = await res.json() as { meals: T[] | null };
     return data.meals?.[0] ?? null;
@@ -33,20 +34,14 @@ async function mealdbFetch<T>(url: string): Promise<T | null> {
   }
 }
 
-async function fetchByIngredient(ingredient: string): Promise<MealSummary | null> {
-  // MealDB uses underscore-joined ingredient names
-  const query = ingredient.split(",")[0].trim().replace(/\s+/g, "_");
-  const url = `${BASE}/filter.php?i=${encodeURIComponent(query)}`;
+async function mealdbGetAll<T>(path: string): Promise<T[] | null> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(url, { signal: controller.signal });
+    const res = await fetch(`${BASE}${path}`, { signal: controller.signal });
     if (!res.ok) return null;
-    const data = await res.json() as { meals: MealSummary[] | null };
-    const meals = data.meals;
-    if (!meals || meals.length === 0) return null;
-    // Pick a random result so repeated calls vary
-    return meals[Math.floor(Math.random() * Math.min(meals.length, 10))];
+    const data = await res.json() as { meals: T[] | null };
+    return data.meals ?? null;
   } catch {
     return null;
   } finally {
@@ -54,8 +49,16 @@ async function fetchByIngredient(ingredient: string): Promise<MealSummary | null
   }
 }
 
+function pickRandom<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+async function fetchDetail(idMeal: string): Promise<MealDetail | null> {
+  return mealdbGet<MealDetail>(`/lookup.php?i=${idMeal}`);
+}
+
 function parseMealDetail(meal: MealDetail): Omit<Recipe, "id"> {
-  // Extract ingredients (strIngredient1–20, skip empty)
+  // Ingredients: strIngredient1–20 paired with strMeasure1–20
   const ingredients: string[] = [];
   for (let i = 1; i <= 20; i++) {
     const name = meal[`strIngredient${i}`]?.trim();
@@ -64,36 +67,33 @@ function parseMealDetail(meal: MealDetail): Omit<Recipe, "id"> {
     ingredients.push(measure ? `${measure} ${name}` : name);
   }
 
-  // Split instructions into steps on double newline or numbered lines
+  // Steps: split on double newline or numbered lines
   const rawSteps = meal.strInstructions
-    .split(/\r?\n\r?\n|\r?\n(?=\d+[\.\)]?\s)/)
+    .split(/\r?\n\r?\n|\r?\n(?=\d+[\.\)]\s)/)
     .map((s) => s.replace(/^\d+[\.\)]\s*/, "").replace(/\r?\n/g, " ").trim())
     .filter((s) => s.length > 10);
 
   const tags = [
     meal.strCategory,
     meal.strArea,
-    ...(meal.strTags?.split(",").map((t) => t.trim()) ?? []),
+    ...(meal.strTags?.split(",").map((t) => t.trim()).filter(Boolean) ?? []),
   ].filter(Boolean) as string[];
 
   const sourceUrl = meal.strSource?.startsWith("http") ? meal.strSource : undefined;
+  const thumbUrl = meal.strMealThumb ?? undefined;
 
-  // Rough difficulty/time heuristics from step count and instructions length
   const stepCount = rawSteps.length;
-  const difficulty: Recipe["difficulty"] =
-    stepCount >= 8 ? "Medium" : "Easy";
+  const difficulty: Recipe["difficulty"] = stepCount >= 8 ? "Medium" : "Easy";
   const timeMin = Math.max(15, Math.min(90, stepCount * 7));
 
-  // Savory/sweet heuristic from category
   const sweetCategories = new Set(["Dessert", "Breakfast", "Starter"]);
-  const recipeType: Recipe["recipeType"] = sweetCategories.has(meal.strCategory)
-    ? "sweet"
-    : "savory";
+  const recipeType: Recipe["recipeType"] = sweetCategories.has(meal.strCategory) ? "sweet" : "savory";
 
   return {
     name: meal.strMeal,
-    description: `${meal.strArea} ${meal.strCategory.toLowerCase()} recipe from TheMealDB.`,
+    description: `${meal.strArea} ${meal.strCategory.toLowerCase()} from TheMealDB.`,
     sourceUrl,
+    thumbUrl,
     ingredients,
     ingredientsHu: [],
     time: `${timeMin} min`,
@@ -107,28 +107,55 @@ function parseMealDetail(meal: MealDetail): Omit<Recipe, "id"> {
 }
 
 /**
- * Try to find a MealDB recipe that uses one of the provided inventory ingredients.
- * Tries each ingredient in order and returns the first full match.
+ * Strategy:
+ * 1. Search by ingredient name (up to 6 ingredients tried)
+ * 2. Search by ingredient keyword via name search
+ * 3. Fall back to a random meal
+ * Always returns something.
  */
 export async function suggestFromMealDB(
   inventoryIngredients: string[],
 ): Promise<{ recipe: Omit<Recipe, "id">; source: "mealdb" } | null> {
-  // Try up to 6 ingredients before giving up
   const candidates = inventoryIngredients.slice(0, 6);
 
+  // 1. Filter by ingredient — try each inventory item
   for (const ingredient of candidates) {
-    const summary = await fetchByIngredient(ingredient);
-    if (!summary) continue;
+    const query = ingredient.split(",")[0].trim().replace(/\s+/g, "_");
+    const summaries = await mealdbGetAll<MealSummary>(`/filter.php?i=${encodeURIComponent(query)}`);
+    if (!summaries || summaries.length === 0) continue;
 
-    const detail = await mealdbFetch<MealDetail>(
-      `${BASE}/lookup.php?i=${summary.idMeal}`,
-    );
-    if (!detail || !detail.strInstructions) continue;
+    const summary = pickRandom(summaries.slice(0, 10));
+    const detail = await fetchDetail(summary.idMeal);
+    if (!detail?.strInstructions) continue;
 
     const recipe = parseMealDetail(detail);
     if (recipe.ingredients.length === 0 || recipe.steps.length === 0) continue;
 
     return { recipe, source: "mealdb" };
+  }
+
+  // 2. Name search — search for the first ingredient as a keyword
+  if (candidates.length > 0) {
+    const keyword = candidates[0].split(",")[0].trim();
+    const summaries = await mealdbGetAll<MealSummary>(`/search.php?s=${encodeURIComponent(keyword)}`);
+    if (summaries && summaries.length > 0) {
+      const detail = await fetchDetail(pickRandom(summaries.slice(0, 5)).idMeal);
+      if (detail?.strInstructions) {
+        const recipe = parseMealDetail(detail);
+        if (recipe.ingredients.length > 0 && recipe.steps.length > 0) {
+          return { recipe, source: "mealdb" };
+        }
+      }
+    }
+  }
+
+  // 3. Random meal — always available, never fails
+  const random = await mealdbGet<MealDetail>(`/random.php`);
+  if (random?.strInstructions) {
+    const recipe = parseMealDetail(random);
+    if (recipe.ingredients.length > 0 && recipe.steps.length > 0) {
+      return { recipe, source: "mealdb" };
+    }
   }
 
   return null;

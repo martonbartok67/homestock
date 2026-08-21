@@ -672,6 +672,9 @@ body { background: var(--paper); }
 .online-suggestion-panel strong { display: block; color: var(--ink); font-size: 16px; margin-top: 4px; }
 .online-suggestion-panel p { color: var(--muted); font-size: 12px; line-height: 1.5; margin: 6px 0 0; max-width: 680px; }
 .online-suggestion-panel small { color: var(--sage-deep); margin-top: 7px; }
+.suggestion-thumb { width: 80px; height: 80px; border-radius: 10px; object-fit: cover; flex: 0 0 80px; }
+.suggestion-body { flex: 1; min-width: 0; }
+@media (max-width: 760px) { .suggestion-thumb { width: 60px; height: 60px; flex: 0 0 60px; } }
 .online-suggestion-actions { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
 .recipe-controls { display: flex; flex-direction: column; gap: 0; border: 1px solid var(--line); border-radius: 11px; overflow: hidden; margin-bottom: 22px; }
 .recipe-filter-row { display: flex; gap: 0; border-bottom: 1px solid var(--line); }

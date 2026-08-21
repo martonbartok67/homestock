@@ -31,6 +31,7 @@ export type Recipe = {
   description: string;
   descriptionHu?: string;
   sourceUrl?: string;
+  thumbUrl?: string;
   ingredients: string[];
   ingredientsHu?: string[];
   time: string;

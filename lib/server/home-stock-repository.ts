@@ -19,7 +19,7 @@ const schemaStatements = [
   `CREATE TABLE IF NOT EXISTS household_members (id TEXT PRIMARY KEY NOT NULL, household_id TEXT NOT NULL, email TEXT NOT NULL, created_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS inventory_items (id TEXT PRIMARY KEY NOT NULL, household_id TEXT NOT NULL, name TEXT NOT NULL, category TEXT NOT NULL, location TEXT NOT NULL, quantity INTEGER NOT NULL DEFAULT 1, unit TEXT NOT NULL, expiry TEXT, purchase_date TEXT, notes TEXT, basic INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS shopping_list_items (id TEXT PRIMARY KEY NOT NULL, household_id TEXT NOT NULL, name TEXT NOT NULL, quantity TEXT NOT NULL DEFAULT '1', category TEXT NOT NULL, checked INTEGER NOT NULL DEFAULT 0, note TEXT, source TEXT NOT NULL DEFAULT 'manual', created_at TEXT NOT NULL)`,
-  `CREATE TABLE IF NOT EXISTS recipes (id TEXT PRIMARY KEY NOT NULL, household_id TEXT NOT NULL, name TEXT NOT NULL, name_hu TEXT, description TEXT NOT NULL, description_hu TEXT, source_url TEXT, time TEXT NOT NULL, difficulty TEXT NOT NULL, recipe_type TEXT NOT NULL DEFAULT 'savory', tags TEXT NOT NULL DEFAULT '[]', tags_hu TEXT NOT NULL DEFAULT '[]', steps TEXT NOT NULL DEFAULT '[]', steps_hu TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS recipes (id TEXT PRIMARY KEY NOT NULL, household_id TEXT NOT NULL, name TEXT NOT NULL, name_hu TEXT, description TEXT NOT NULL, description_hu TEXT, source_url TEXT, time TEXT NOT NULL, difficulty TEXT NOT NULL, recipe_type TEXT NOT NULL DEFAULT 'savory', thumb_url TEXT, tags TEXT NOT NULL DEFAULT '[]', tags_hu TEXT NOT NULL DEFAULT '[]', steps TEXT NOT NULL DEFAULT '[]', steps_hu TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS recipe_ingredients (id TEXT PRIMARY KEY NOT NULL, household_id TEXT NOT NULL, recipe_id TEXT NOT NULL, ingredient_name TEXT NOT NULL, ingredient_name_hu TEXT, sort_order INTEGER NOT NULL DEFAULT 0)`,
   `CREATE TABLE IF NOT EXISTS user_preferences (id TEXT PRIMARY KEY NOT NULL, household_id TEXT NOT NULL, workspace_name TEXT NOT NULL DEFAULT 'Household', created_at TEXT NOT NULL)`,
 ];
@@ -107,6 +107,9 @@ async function ensureCurrentColumns() {
     statements.push(
       "ALTER TABLE recipes ADD COLUMN steps_hu TEXT NOT NULL DEFAULT '[]'",
     );
+  }
+  if (!recipeColumns.has("thumb_url")) {
+    statements.push("ALTER TABLE recipes ADD COLUMN thumb_url TEXT");
   }
   if (!recipeColumns.has("recipe_type")) {
     statements.push(
@@ -246,6 +249,7 @@ export async function getSnapshot(householdId: string) {
       description: recipe.description,
       descriptionHu: recipe.descriptionHu ?? undefined,
       sourceUrl: recipe.sourceUrl ?? undefined,
+      thumbUrl: recipe.thumbUrl ?? undefined,
       time: recipe.time,
       difficulty: recipe.difficulty as Recipe["difficulty"],
       recipeType: (recipe.recipeType ?? "savory") as Recipe["recipeType"],
@@ -533,6 +537,7 @@ export async function addRecipe(
       description: recipe.description,
       descriptionHu: recipe.descriptionHu ?? null,
       sourceUrl: recipe.sourceUrl ?? null,
+      thumbUrl: recipe.thumbUrl ?? null,
       time: recipe.time,
       difficulty: recipe.difficulty,
       recipeType: recipe.recipeType,
@@ -586,6 +591,7 @@ export async function updateRecipe(
         description: recipe.description,
         descriptionHu: recipe.descriptionHu ?? null,
         sourceUrl: recipe.sourceUrl ?? null,
+        thumbUrl: recipe.thumbUrl ?? null,
         time: recipe.time,
         difficulty: recipe.difficulty,
         recipeType: recipe.recipeType,

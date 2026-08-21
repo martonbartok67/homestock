@@ -132,6 +132,7 @@ function recipe(value: unknown): Omit<Recipe, "id"> {
     description: text(input.description, "Recipe description", 2_000, "Home recipe"),
     descriptionHu: optionalText(input.descriptionHu, "Hungarian description", 2_000),
     sourceUrl: publicUrl(input.sourceUrl),
+    thumbUrl: typeof input.thumbUrl === "string" ? input.thumbUrl.slice(0, 500) : undefined,
     ingredients: stringList(input.ingredients, "Ingredients", { maxItems: 80, maxLength: 300, required: true }),
     ingredientsHu: stringList(input.ingredientsHu, "Hungarian ingredients", { maxItems: 80, maxLength: 300 }),
     time: text(input.time, "Recipe time", 40, "30 min"),
