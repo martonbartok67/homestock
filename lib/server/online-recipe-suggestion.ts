@@ -177,9 +177,17 @@ export async function suggestRecipeFromInventory({
   // Type hint appended to queries
   const typeHint = typeFilter === "savory" ? "savory dinner" : typeFilter === "sweet" ? "sweet dessert" : "";
 
+  // Names to avoid — derived from excludeIds
+  const excludeNames = recipes
+    .filter((r) => excludeIds.includes(r.id))
+    .map((r) => r.name);
+  const avoidClause = excludeNames.length > 0
+    ? `Do not suggest any of these recipes: ${excludeNames.join(", ")}.`
+    : "";
+
   // Tier 1: Web search (Brave / Tavily / SerpAPI / DuckDuckGo) → scrape URL
   // Tries each candidate URL until one scrapes successfully
-  const recipeUrls = await searchRecipeUrls(ingredients, typeHint).catch(() => [] as string[]);
+  const recipeUrls = await searchRecipeUrls(ingredients, typeHint, excludeNames).catch(() => [] as string[]);
   for (const url of recipeUrls) {
     try {
       const imported = await importRecipeFromUrl(url);
@@ -200,6 +208,7 @@ export async function suggestRecipeFromInventory({
           "Use Google Search to find exactly one real recipe page from the public web.",
           "Do not invent a recipe.",
           `Choose a practical ${typeHint || "dinner"} recipe based on the household's available ingredients.`,
+          ...(avoidClause ? [avoidClause] : []),
           "Use these available ingredients first:",
           ingredients.join(", "),
           "You may assume basic pantry staples only: water, salt, pepper, and a small amount of oil.",
@@ -236,6 +245,7 @@ export async function suggestRecipeFromInventory({
         text: [
           `Create exactly one practical ${typeHint || "dinner"} recipe idea.`,
           "This is a fallback because real Google Search recipe scouting is unavailable.",
+          ...(avoidClause ? [avoidClause] : []),
           "Use these available ingredients first:",
           ingredients.join(", "),
           "You may assume basic pantry staples only: water, salt, pepper, and a small amount of oil.",
@@ -247,7 +257,7 @@ export async function suggestRecipeFromInventory({
       }],
     }],
     generationConfig: {
-      temperature: 0.45,
+      temperature: excludeNames.length > 0 ? 0.85 : 0.45,
       maxOutputTokens: 900,
       responseMimeType: "application/json",
     },

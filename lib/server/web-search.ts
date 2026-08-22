@@ -137,8 +137,10 @@ async function searchDuckDuckGo(query: string): Promise<string | null> {
 export async function searchRecipeUrls(
   ingredients: string[],
   typeHint = "",
+  excludeNames: string[] = [],
 ): Promise<string[]> {
-  const query = `${typeHint || "dinner"} recipe using ${ingredients.slice(0, 5).join(", ")}`;
+  const avoidPart = excludeNames.length > 0 ? ` -"${excludeNames[0]}"` : "";
+  const query = `${typeHint || "dinner"} recipe using ${ingredients.slice(0, 5).join(", ")}${avoidPart}`;
   const seen = new Set<string>();
   const results: string[] = [];
 

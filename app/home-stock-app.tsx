@@ -318,6 +318,7 @@ export default function Home() {
     return saved;
   };
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(false);
+  const [seenSuggestionIds, setSeenSuggestionIds] = useState<string[]>([]);
   const loadCatalog = async () => {
     setIsLoadingCatalog(true);
     let added = 0;
@@ -351,6 +352,10 @@ export default function Home() {
     if (isSuggestingRecipe) return;
     setIsSuggestingRecipe(true);
     setSuggestionStatus("Searching...");
+    const newSeen = typeof excludeId === "string" && !seenSuggestionIds.includes(excludeId)
+      ? [...seenSuggestionIds, excludeId]
+      : seenSuggestionIds;
+    if (typeof excludeId === "string") setSeenSuggestionIds(newSeen);
     try {
       const response = await householdFetch("/api/recipes/suggest", {
         method: "POST",
@@ -358,7 +363,7 @@ export default function Home() {
         body: JSON.stringify({
           mode: recipeMode,
           typeFilter: recipeTypeFilter,
-          excludeIds: typeof excludeId === "string" ? [excludeId] : [],
+          excludeIds: newSeen,
         }),
       });
       const body = await response.json() as { source?: RecipeSuggestionSource; recipe?: Recipe | Omit<Recipe, "id">; error?: string };
@@ -391,7 +396,7 @@ export default function Home() {
     if (view === "inventory") return <InventoryView inventory={filteredInventory} query={query} setQuery={setQuery} categoryFilter={categoryFilter} setCategoryFilter={setCategoryFilter} onAdd={() => setShowAdd(true)} onFinish={finishItem} onDelete={deleteItem} onEditItem={setEditingItem} onEditExpiry={setEditingExpiryItem} />;
     if (view === "expiring") return <ExpiringView items={expiring} onFinish={finishItem} onDelete={deleteItem} onAdd={() => setShowAdd(true)} onEditItem={setEditingItem} onEditExpiry={setEditingExpiryItem} />;
     if (view === "shopping") return <ShoppingView shopping={shopping} onToggle={toggleShopping} onRemove={removeShopping} onAdd={(name) => addShopping(name)} />;
-    if (view === "recipes") return <RecipesView mode={recipeMode} setMode={setRecipeMode} typeFilter={recipeTypeFilter} setTypeFilter={setRecipeTypeFilter} recipes={recipeList} inventory={inventory} suggestedRecipe={suggestedRecipe} suggestionSource={suggestionSource} suggestionStatus={suggestionStatus} isSuggesting={isSuggestingRecipe} onSuggest={() => suggestOnlineRecipe()} onSuggestAnother={(id) => suggestOnlineRecipe(id)} onOpen={setActiveRecipe} onOpenSuggestion={() => suggestedRecipe && setActiveRecipe(suggestedRecipe)} onSaveSuggestion={saveSuggestedRecipe} onEdit={setEditingRecipe} onDelete={deleteRecipe} onAddMissing={addMissing} onAdd={() => setShowRecipeForm(true)} onLoadCatalog={loadCatalog} isLoadingCatalog={isLoadingCatalog} />;
+    if (view === "recipes") return <RecipesView mode={recipeMode} setMode={setRecipeMode} typeFilter={recipeTypeFilter} setTypeFilter={setRecipeTypeFilter} recipes={recipeList} inventory={inventory} suggestedRecipe={suggestedRecipe} suggestionSource={suggestionSource} suggestionStatus={suggestionStatus} isSuggesting={isSuggestingRecipe} onSuggest={() => { setSeenSuggestionIds([]); suggestOnlineRecipe(); }} onSuggestAnother={(id) => suggestOnlineRecipe(id)} onOpen={setActiveRecipe} onOpenSuggestion={() => suggestedRecipe && setActiveRecipe(suggestedRecipe)} onSaveSuggestion={saveSuggestedRecipe} onEdit={setEditingRecipe} onDelete={deleteRecipe} onAddMissing={addMissing} onAdd={() => setShowRecipeForm(true)} onLoadCatalog={loadCatalog} isLoadingCatalog={isLoadingCatalog} />;
     if (view === "settings") return <SettingsView householdName={household?.name ?? "Your household"} memberCount={household?.memberCount} inventory={inventory} shopping={shopping} recipes={recipeList} />;
     return <Dashboard inventory={inventory} expiring={expiring} basics={basics} shopping={shopping} recipes={recipeList} greeting={greeting} onAdd={() => setShowAdd(true)} onView={setView} onFinish={finishItem} onDelete={deleteItem} onRecipe={() => setView("recipes")} onAddShopping={(item) => addShopping(item.name, item.category, "inventory")} />;
   };
