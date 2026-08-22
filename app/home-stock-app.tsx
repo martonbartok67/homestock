@@ -347,15 +347,19 @@ export default function Home() {
     }
   };
 
-  const suggestOnlineRecipe = async () => {
+  const suggestOnlineRecipe = async (excludeId?: string) => {
     if (isSuggestingRecipe) return;
     setIsSuggestingRecipe(true);
-    setSuggestionStatus("Checking your saved recipes first...");
+    setSuggestionStatus("Searching...");
     try {
       const response = await householdFetch("/api/recipes/suggest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({
+          mode: recipeMode,
+          typeFilter: recipeTypeFilter,
+          excludeIds: excludeId ? [excludeId] : [],
+        }),
       });
       const body = await response.json() as { source?: RecipeSuggestionSource; recipe?: Recipe | Omit<Recipe, "id">; error?: string };
       if (!response.ok || !body.recipe || !body.source) throw new Error(body.error ?? "Could not suggest a recipe.");
@@ -387,7 +391,7 @@ export default function Home() {
     if (view === "inventory") return <InventoryView inventory={filteredInventory} query={query} setQuery={setQuery} categoryFilter={categoryFilter} setCategoryFilter={setCategoryFilter} onAdd={() => setShowAdd(true)} onFinish={finishItem} onDelete={deleteItem} onEditItem={setEditingItem} onEditExpiry={setEditingExpiryItem} />;
     if (view === "expiring") return <ExpiringView items={expiring} onFinish={finishItem} onDelete={deleteItem} onAdd={() => setShowAdd(true)} onEditItem={setEditingItem} onEditExpiry={setEditingExpiryItem} />;
     if (view === "shopping") return <ShoppingView shopping={shopping} onToggle={toggleShopping} onRemove={removeShopping} onAdd={(name) => addShopping(name)} />;
-    if (view === "recipes") return <RecipesView mode={recipeMode} setMode={setRecipeMode} typeFilter={recipeTypeFilter} setTypeFilter={setRecipeTypeFilter} recipes={recipeList} inventory={inventory} suggestedRecipe={suggestedRecipe} suggestionSource={suggestionSource} suggestionStatus={suggestionStatus} isSuggesting={isSuggestingRecipe} onSuggest={suggestOnlineRecipe} onOpen={setActiveRecipe} onOpenSuggestion={() => suggestedRecipe && setActiveRecipe(suggestedRecipe)} onSaveSuggestion={saveSuggestedRecipe} onEdit={setEditingRecipe} onDelete={deleteRecipe} onAddMissing={addMissing} onAdd={() => setShowRecipeForm(true)} onLoadCatalog={loadCatalog} isLoadingCatalog={isLoadingCatalog} />;
+    if (view === "recipes") return <RecipesView mode={recipeMode} setMode={setRecipeMode} typeFilter={recipeTypeFilter} setTypeFilter={setRecipeTypeFilter} recipes={recipeList} inventory={inventory} suggestedRecipe={suggestedRecipe} suggestionSource={suggestionSource} suggestionStatus={suggestionStatus} isSuggesting={isSuggestingRecipe} onSuggest={suggestOnlineRecipe} onSuggestAnother={(id) => suggestOnlineRecipe(id)} onOpen={setActiveRecipe} onOpenSuggestion={() => suggestedRecipe && setActiveRecipe(suggestedRecipe)} onSaveSuggestion={saveSuggestedRecipe} onEdit={setEditingRecipe} onDelete={deleteRecipe} onAddMissing={addMissing} onAdd={() => setShowRecipeForm(true)} onLoadCatalog={loadCatalog} isLoadingCatalog={isLoadingCatalog} />;
     if (view === "settings") return <SettingsView householdName={household?.name ?? "Your household"} memberCount={household?.memberCount} inventory={inventory} shopping={shopping} recipes={recipeList} />;
     return <Dashboard inventory={inventory} expiring={expiring} basics={basics} shopping={shopping} recipes={recipeList} greeting={greeting} onAdd={() => setShowAdd(true)} onView={setView} onFinish={finishItem} onDelete={deleteItem} onRecipe={() => setView("recipes")} onAddShopping={(item) => addShopping(item.name, item.category, "inventory")} />;
   };
@@ -458,7 +462,7 @@ function recipeDescription(recipe: Recipe, source: RecipeSuggestionSource | null
   return recipe.description;
 }
 
-function RecipesView({ mode, setMode, typeFilter, setTypeFilter, recipes: recipeList, inventory, suggestedRecipe, suggestionSource, suggestionStatus, isSuggesting, onSuggest, onOpen, onOpenSuggestion, onSaveSuggestion, onEdit, onDelete, onAddMissing, onAdd, onLoadCatalog, isLoadingCatalog }: { mode: RecipeMode; setMode: (mode: RecipeMode) => void; typeFilter: "All" | "savory" | "sweet"; setTypeFilter: (type: "All" | "savory" | "sweet") => void; recipes: Recipe[]; inventory: InventoryItem[]; suggestedRecipe: Recipe | null; suggestionSource: RecipeSuggestionSource | null; suggestionStatus: string; isSuggesting: boolean; onSuggest: () => void; onOpen: (recipe: Recipe) => void; onOpenSuggestion: () => void; onSaveSuggestion: () => void; onEdit: (recipe: Recipe) => void; onDelete: (recipe: Recipe) => void; onAddMissing: (recipe: Recipe) => void; onAdd: () => void; onLoadCatalog: () => void; isLoadingCatalog: boolean }) {
+function RecipesView({ mode, setMode, typeFilter, setTypeFilter, recipes: recipeList, inventory, suggestedRecipe, suggestionSource, suggestionStatus, isSuggesting, onSuggest, onSuggestAnother, onOpen, onOpenSuggestion, onSaveSuggestion, onEdit, onDelete, onAddMissing, onAdd, onLoadCatalog, isLoadingCatalog }: { mode: RecipeMode; setMode: (mode: RecipeMode) => void; typeFilter: "All" | "savory" | "sweet"; setTypeFilter: (type: "All" | "savory" | "sweet") => void; recipes: Recipe[]; inventory: InventoryItem[]; suggestedRecipe: Recipe | null; suggestionSource: RecipeSuggestionSource | null; suggestionStatus: string; isSuggesting: boolean; onSuggest: () => void; onSuggestAnother: (excludeId: string) => void; onOpen: (recipe: Recipe) => void; onOpenSuggestion: () => void; onSaveSuggestion: () => void; onEdit: (recipe: Recipe) => void; onDelete: (recipe: Recipe) => void; onAddMissing: (recipe: Recipe) => void; onAdd: () => void; onLoadCatalog: () => void; isLoadingCatalog: boolean }) {
   const filtered = typeFilter === "All" ? recipeList : recipeList.filter((recipe) => recipe.recipeType === typeFilter);
   const expiringInventory = inventory.filter((item) => ["expired", "urgent", "warning"].includes(getExpiryStatus(item.expiry)));
   const sorted = [...filtered].sort((a, b) => {
@@ -480,7 +484,7 @@ function RecipesView({ mode, setMode, typeFilter, setTypeFilter, recipes: recipe
     {(suggestionStatus || suggestedRecipe) && <section className="online-suggestion-panel">
       {suggestedRecipe?.thumbUrl && <img className="suggestion-thumb" src={suggestedRecipe.thumbUrl + "/medium"} alt={suggestedRecipe.name} />}
       <div className="suggestion-body"><span>{suggestionSource === "web" ? "Real online recipe" : suggestionSource === "mealdb" ? "TheMealDB" : suggestionSource === "ai" ? "AI idea" : suggestionSource === "local" ? "Saved recipe match" : "Online recipe search"}</span><strong>{suggestedRecipe?.name ?? suggestionStatus}</strong>{suggestedRecipe && <p>{recipeDescription(suggestedRecipe, suggestionSource)}</p>}{suggestionStatus && suggestedRecipe && <small>{suggestionStatus}</small>}{suggestedRecipe?.sourceUrl && <small>Source: {sourceHostname(suggestedRecipe.sourceUrl)}</small>}</div>
-      {suggestedRecipe && <div className="online-suggestion-actions"><button className="secondary-button" onClick={onOpenSuggestion}>View recipe</button>{(suggestionSource === "web" || suggestionSource === "mealdb" || suggestionSource === "ai") && <button className="text-button" onClick={onSaveSuggestion}>Save recipe</button>}</div>}
+      {suggestedRecipe && <div className="online-suggestion-actions"><button className="secondary-button" onClick={onOpenSuggestion}>View recipe</button><button className="secondary-button" onClick={() => onSuggestAnother(suggestedRecipe.id)} disabled={isSuggesting}>Try another</button>{(suggestionSource === "web" || suggestionSource === "mealdb" || suggestionSource === "ai") && <button className="text-button" onClick={onSaveSuggestion}>Save recipe</button>}</div>}
     </section>}
     <div className="recipe-controls"><div className="recipe-filter-row">{([["use-soon", "Cook with expiring items"], ["use-what-i-have", "Use what I have"], ["minimal-shopping", "Minimal shopping"]] as [RecipeMode, string][]).map(([id, label]) => <button key={id} className={mode === id ? "active" : ""} onClick={() => setMode(id)}>{label}</button>)}</div><div className="recipe-filter-row"><button className={typeFilter === "All" ? "active" : ""} onClick={() => setTypeFilter("All")}>All</button><button className={typeFilter === "savory" ? "active" : ""} onClick={() => setTypeFilter("savory")}>Savory</button><button className={typeFilter === "sweet" ? "active" : ""} onClick={() => setTypeFilter("sweet")}>Sweet</button></div></div>
     <div className="recipe-grid">{sorted.length ? sorted.map((recipe) => <RecipeCard key={recipe.id} recipe={recipe} inventory={inventory} onOpen={() => onOpen(recipe)} onEdit={() => onEdit(recipe)} onDelete={() => onDelete(recipe)} onAddMissing={() => onAddMissing(recipe)} />) : <EmptyState title={recipeList.length ? "No recipes match this filter" : "No recipes yet"} body={recipeList.length ? "Try a different type filter or add a new recipe." : "Add your own, or load the starter catalog."} action={<div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}><button className="secondary-button" onClick={onAdd}>＋ Add recipe</button>{!recipeList.length && <button className="secondary-button" onClick={onLoadCatalog} disabled={isLoadingCatalog}>{isLoadingCatalog ? "Loading…" : "Load sample recipes"}</button>}</div>} />}</div>

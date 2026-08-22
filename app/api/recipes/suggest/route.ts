@@ -9,13 +9,21 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Recipe suggestion failed.";
 }
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
     const { householdId } = await requireHousehold();
+    const body = await request.json().catch(() => ({})) as {
+      mode?: string;
+      typeFilter?: string;
+      excludeIds?: string[];
+    };
     const snapshot = await getSnapshot(householdId);
     const suggestion = await suggestRecipeFromInventory({
       inventory: snapshot.inventory,
       recipes: snapshot.recipes,
+      mode: body.mode ?? "use-what-i-have",
+      typeFilter: body.typeFilter ?? "All",
+      excludeIds: body.excludeIds ?? [],
     });
 
     return NextResponse.json(suggestion);

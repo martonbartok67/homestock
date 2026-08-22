@@ -138,20 +138,48 @@ export async function suggestRecipeFromInventory({
   inventory,
   recipes,
   ingredientNames,
+  mode = "use-what-i-have",
+  typeFilter = "All",
+  excludeIds = [],
 }: {
   inventory: InventoryItem[];
   recipes: Recipe[];
   ingredientNames?: string[];
+  mode?: string;
+  typeFilter?: string;
+  excludeIds?: string[];
 }) {
-  const localRecipe = ingredientNames ? undefined : bestLocalRecipe(recipes, inventory);
+  // Local match — skip if excludeIds already contains it
+  const localRecipe = ingredientNames ? undefined : bestLocalRecipe(
+    recipes.filter((r) => !excludeIds.includes(r.id)),
+    inventory,
+  );
   if (localRecipe) return { source: "local" as const, recipe: localRecipe };
 
-  const ingredients = ingredientNames?.map((name) => cleanText(name)).filter(Boolean).slice(0, maxIngredients) ?? cleanInventory(inventory);
+  // Build ingredient list based on mode
+  let baseInventory = inventory;
+  if (mode === "use-soon") {
+    // Prioritise items expiring within 5 days
+    const soon = inventory.filter((item) => {
+      if (!item.expiry) return false;
+      const days = Math.round((new Date(item.expiry).getTime() - Date.now()) / 86_400_000);
+      return days >= 0 && days <= 5;
+    });
+    if (soon.length >= 2) baseInventory = [...soon, ...inventory.filter((i) => !soon.includes(i))];
+  } else if (mode === "minimal-shopping") {
+    // Sort by quantity descending — most-stocked items first
+    baseInventory = [...inventory].sort((a, b) => b.quantity - a.quantity);
+  }
+
+  const ingredients = ingredientNames?.map((name) => cleanText(name)).filter(Boolean).slice(0, maxIngredients) ?? cleanInventory(baseInventory);
   if (ingredients.length === 0) throw new Error("Add some food items to inventory first.");
+
+  // Type hint appended to queries
+  const typeHint = typeFilter === "savory" ? "savory dinner" : typeFilter === "sweet" ? "sweet dessert" : "";
 
   // Tier 1: Web search (Brave / Tavily / SerpAPI / DuckDuckGo) → scrape URL
   try {
-    const recipeUrl = await searchRecipeUrl(ingredients);
+    const recipeUrl = await searchRecipeUrl(ingredients, typeHint);
     if (recipeUrl) {
       const imported = await importRecipeFromUrl(recipeUrl);
       return { source: "web" as const, recipe: imported };
@@ -169,7 +197,7 @@ export async function suggestRecipeFromInventory({
         text: [
           "Use Google Search to find exactly one real recipe page from the public web.",
           "Do not invent a recipe.",
-          "Choose a practical dinner recipe based on the household's available ingredients.",
+          `Choose a practical ${typeHint || "dinner"} recipe based on the household's available ingredients.`,
           "Use these available ingredients first:",
           ingredients.join(", "),
           "You may assume basic pantry staples only: water, salt, pepper, and a small amount of oil.",
@@ -208,7 +236,7 @@ export async function suggestRecipeFromInventory({
     contents: [{
       parts: [{
         text: [
-          "Create exactly one practical dinner recipe idea.",
+          `Create exactly one practical ${typeHint || "dinner"} recipe idea.`,
           "This is a fallback because real Google Search recipe scouting is unavailable.",
           "Use these available ingredients first:",
           ingredients.join(", "),

@@ -114,8 +114,9 @@ async function searchDuckDuckGo(query: string): Promise<string | null> {
  */
 export async function searchRecipeUrl(
   ingredients: string[],
+  typeHint = "",
 ): Promise<string | null> {
-  const query = `recipe using ${ingredients.slice(0, 5).join(", ")} dinner`;
+  const query = `${typeHint || "dinner"} recipe using ${ingredients.slice(0, 5).join(", ")}`;
 
   // Run all available providers concurrently — use the first result that comes back
   const providers = [searchBrave, searchTavily, searchSerp, searchDuckDuckGo];
