@@ -90,17 +90,20 @@ async function searchSerp(query: string): Promise<string | null> {
 }
 
 async function searchDuckDuckGo(query: string): Promise<string | null> {
-  // Unofficial HTML scrape — last resort, no key needed
-  const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+  // DDG lite endpoint — more reliable for server-side scraping
+  const url = `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query + " recipe site:allrecipes.com OR site:bbcgoodfood.com OR site:seriouseats.com")}`;
   const res = await timedFetch(url, {
-    headers: { "User-Agent": "Mozilla/5.0 (compatible; HomeStock/1.0)" },
+    headers: {
+      "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Accept": "text/html",
+    },
   });
   if (!res?.ok) return null;
   const html = await res.text().catch(() => "");
-  // Extract result URLs from DDG's redirect links
-  const matches = [...html.matchAll(/uddg=([^"&]+)/g)]
-    .map((m) => { try { return decodeURIComponent(m[1]); } catch { return ""; } })
-    .filter(Boolean);
+  // DDG lite uses plain href links in results
+  const matches = [...html.matchAll(/href="(https?:\/\/[^"]+)"/g)]
+    .map((m) => m[1])
+    .filter((u) => !u.includes("duckduckgo.com"));
   return pickBestUrl(matches);
 }
 

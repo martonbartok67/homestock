@@ -200,7 +200,7 @@ export async function suggestRecipeFromInventory({
     groundingUnavailableUntil = Date.now() + groundingRetryDelayMs;
   }
 
-  // Tier 2: TheMealDB — free, no key, no quota
+  // Tier 3: TheMealDB — free, no key, ingredient → name → random
   const mealdb = await suggestFromMealDB(ingredients);
   if (mealdb) return mealdb;
 
