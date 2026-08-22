@@ -53,6 +53,28 @@ async function searchBrave(query: string): Promise<string | null> {
   return pickBestUrl(urls);
 }
 
+async function searchBraveAll(query: string): Promise<string[]> {
+  const key = process.env.BRAVE_SEARCH_API_KEY;
+  if (!key) return [];
+  const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=10&result_filter=web`;
+  const res = await timedFetch(url, {
+    headers: { "Accept": "application/json", "X-Subscription-Token": key },
+  });
+  if (!res?.ok) return [];
+  const data = await res.json().catch(() => null) as { web?: { results?: Array<{ url?: string }> } } | null;
+  return (data?.web?.results?.map((r) => r.url ?? "").filter(Boolean) ?? []).filter(isLikelyRecipeUrl);
+}
+
+async function searchSerpAll(query: string): Promise<string[]> {
+  const key = process.env.SERP_API_KEY;
+  if (!key) return [];
+  const url = `https://serpapi.com/search.json?q=${encodeURIComponent(query)}&num=10&api_key=${key}`;
+  const res = await timedFetch(url);
+  if (!res?.ok) return [];
+  const data = await res.json().catch(() => null) as { organic_results?: Array<{ link?: string }> } | null;
+  return (data?.organic_results?.map((r) => r.link ?? "").filter(Boolean) ?? []).filter(isLikelyRecipeUrl);
+}
+
 async function searchTavily(query: string): Promise<string | null> {
   const key = process.env.TAVILY_API_KEY;
   if (!key) return null;
@@ -108,21 +130,31 @@ async function searchDuckDuckGo(query: string): Promise<string | null> {
 }
 
 /**
- * Search for a recipe URL using available search APIs.
+ * Search for recipe URLs using available search APIs.
  * Tries: Brave → Tavily → SerpAPI → DuckDuckGo
- * Returns the first usable URL found, or null if all fail.
+ * Returns ALL candidate URLs so the caller can try each until one scrapes.
  */
-export async function searchRecipeUrl(
+export async function searchRecipeUrls(
   ingredients: string[],
   typeHint = "",
-): Promise<string | null> {
+): Promise<string[]> {
   const query = `${typeHint || "dinner"} recipe using ${ingredients.slice(0, 5).join(", ")}`;
+  const seen = new Set<string>();
+  const results: string[] = [];
 
-  // Run all available providers concurrently — use the first result that comes back
-  const providers = [searchBrave, searchTavily, searchSerp, searchDuckDuckGo];
-  for (const provider of providers) {
-    const url = await provider(query);
-    if (url) return url;
+  // Multi-result providers first for more candidates
+  for (const url of await searchBraveAll(query)) {
+    if (!seen.has(url)) { seen.add(url); results.push(url); }
   }
-  return null;
+  for (const url of await searchSerpAll(query)) {
+    if (!seen.has(url)) { seen.add(url); results.push(url); }
+  }
+  // Single-result fallbacks
+  if (results.length < 3) {
+    for (const provider of [searchTavily, searchDuckDuckGo]) {
+      const url = await provider(query);
+      if (url && !seen.has(url)) { seen.add(url); results.push(url); }
+    }
+  }
+  return results.slice(0, 8);
 }

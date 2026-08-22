@@ -1,6 +1,6 @@
 import { InventoryItem, matchingIngredients, missingIngredients, Recipe } from "../homestock";
 import { suggestFromMealDB } from "./mealdb";
-import { searchRecipeUrl } from "./web-search";
+import { searchRecipeUrls } from "./web-search";
 import { importRecipeFromUrl } from "./recipe-importer";
 
 type GeminiPart = { text?: string };
@@ -178,14 +178,16 @@ export async function suggestRecipeFromInventory({
   const typeHint = typeFilter === "savory" ? "savory dinner" : typeFilter === "sweet" ? "sweet dessert" : "";
 
   // Tier 1: Web search (Brave / Tavily / SerpAPI / DuckDuckGo) → scrape URL
-  try {
-    const recipeUrl = await searchRecipeUrl(ingredients, typeHint);
-    if (recipeUrl) {
-      const imported = await importRecipeFromUrl(recipeUrl);
+  // Tries each candidate URL until one scrapes successfully
+  const recipeUrls = await searchRecipeUrls(ingredients, typeHint).catch(() => [] as string[]);
+  for (const url of recipeUrls) {
+    try {
+      const imported = await importRecipeFromUrl(url);
       return { source: "web" as const, recipe: imported };
+    } catch {
+      // This URL failed (blocked, paywall, SSRF) — try next
+      continue;
     }
-  } catch {
-    // Search or scrape failed — fall through to Gemini
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
