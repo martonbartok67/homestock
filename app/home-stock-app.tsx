@@ -538,6 +538,7 @@ function RecipeFormModal({ initialRecipe, onClose, onSubmit }: { initialRecipe?:
       ingredientsHu: usesHungarianIngredientsAsPrimary ? [] : hungarianIngredients,
       time: time.trim() || "30 min",
       difficulty,
+      recipeType: initialRecipe?.recipeType ?? "savory",
       tags: usesHungarianTagsAsPrimary ? hungarianTags : englishTags,
       tagsHu: usesHungarianTagsAsPrimary ? [] : hungarianTags,
       steps,
