@@ -183,8 +183,26 @@ export async function getHouseholdForEmail(email: string) {
     .innerJoin(households, eq(householdMembers.householdId, households.id))
     .where(eq(householdMembers.email, normalizedEmail))
     .limit(1);
-  const household = rows[0];
-  if (!household) return null;
+  let household = rows[0];
+  if (!household) {
+    const isLocalDevelopment = process.env.NODE_ENV !== "production" && process.env.TURSO_DATABASE_URL?.includes("[SENSITIVE]");
+    if (!isLocalDevelopment) return null;
+
+    const householdId = crypto.randomUUID();
+    const createdAt = now();
+    await db.insert(households).values({
+      id: householdId,
+      name: "My Home",
+      createdAt,
+    });
+    await db.insert(householdMembers).values({
+      id: crypto.randomUUID(),
+      householdId,
+      email: normalizedEmail,
+      createdAt,
+    });
+    household = { id: householdId, name: "My Home" };
+  }
 
   const memberRows = await db
     .select({ value: count() })
@@ -343,6 +361,30 @@ export async function deleteInventoryItem(
         eq(inventoryItems.householdId, householdId),
       ),
     );
+  return getSnapshot(householdId);
+}
+
+export async function updateInventoryItem(
+  householdId: string,
+  id: string,
+  item: Omit<InventoryItem, "id">,
+) {
+  assertHouseholdId(householdId);
+  await ensureDatabase();
+  await getDb()
+    .update(inventoryItems)
+    .set({
+      name: item.name,
+      category: item.category,
+      location: item.location,
+      quantity: item.quantity,
+      unit: item.unit,
+      expiry: item.expiry ?? null,
+      purchaseDate: item.purchaseDate ?? null,
+      notes: item.notes ?? null,
+      basic: item.basic,
+    })
+    .where(and(eq(inventoryItems.id, id), eq(inventoryItems.householdId, householdId)));
   return getSnapshot(householdId);
 }
 

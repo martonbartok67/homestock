@@ -145,8 +145,13 @@ function recipe(value: unknown): Omit<Recipe, "id"> {
   };
 }
 
+function inventoryUpdate(value: unknown): Omit<InventoryItem, "id"> {
+  return inventoryItem(value);
+}
+
 export type HomeStockAction =
   | { action: "addInventory"; item: Omit<InventoryItem, "id"> }
+  | { action: "updateInventory"; id: string; item: Omit<InventoryItem, "id"> }
   | { action: "deleteInventory" | "finishInventory" | "toggleShopping" | "deleteShopping" | "deleteRecipe"; id: string }
   | { action: "updateInventoryExpiry"; id: string; expiry?: string }
   | { action: "addShopping"; item: Omit<ShoppingListItem, "id" | "checked"> }
@@ -159,6 +164,7 @@ export function parseHomeStockAction(value: unknown): HomeStockAction {
   const body = record(value, "Request");
   switch (body.action) {
     case "addInventory": return { action: body.action, item: inventoryItem(body.item) };
+    case "updateInventory": return { action: body.action, id: id(body.id), item: inventoryUpdate(body.item) };
     case "deleteInventory":
     case "finishInventory":
     case "toggleShopping":
