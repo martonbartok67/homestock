@@ -364,30 +364,6 @@ export async function deleteInventoryItem(
   return getSnapshot(householdId);
 }
 
-export async function updateInventoryItem(
-  householdId: string,
-  id: string,
-  item: Omit<InventoryItem, "id">,
-) {
-  assertHouseholdId(householdId);
-  await ensureDatabase();
-  await getDb()
-    .update(inventoryItems)
-    .set({
-      name: item.name,
-      category: item.category,
-      location: item.location,
-      quantity: item.quantity,
-      unit: item.unit,
-      expiry: item.expiry ?? null,
-      purchaseDate: item.purchaseDate ?? null,
-      notes: item.notes ?? null,
-      basic: item.basic,
-    })
-    .where(and(eq(inventoryItems.id, id), eq(inventoryItems.householdId, householdId)));
-  return getSnapshot(householdId);
-}
-
 export async function updateInventoryExpiry(
   householdId: string,
   id: string,
