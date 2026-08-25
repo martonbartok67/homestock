@@ -24,8 +24,16 @@ export function BarcodeScanner({ onDetected, onClose }: { onDetected: (barcode: 
         onDetected(result.getText());
       } else if (scanError && scanError.name === "NotAllowedError") {
         setError("Camera access was denied. Enter the barcode manually instead.");
+      } else if (scanError) {
+        console.error("Barcode scanning error:", scanError);
       }
-    }).then((resolvedControls) => { controls = resolvedControls; }).catch(() => setError("Camera scanning is unavailable. Enter the barcode manually instead."));
+    }).then((resolvedControls) => {
+      controls = resolvedControls;
+      console.log("Barcode scanner initialized successfully");
+    }).catch((error) => {
+      console.error("Barcode scanner initialization error:", error);
+      setError("Camera scanning is unavailable. Enter the barcode manually instead.");
+    });
     return () => { stopped = true; stopCamera(); };
   }, [onDetected]);
 
