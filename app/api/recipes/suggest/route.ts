@@ -16,6 +16,8 @@ export async function POST(request: Request) {
       mode?: string;
       typeFilter?: string;
       excludeIds?: string[];
+      excludeNames?: string[];
+      excludeUrls?: string[];
     };
     const snapshot = await getSnapshot(householdId);
     const suggestion = await suggestRecipeFromInventory({
@@ -24,6 +26,8 @@ export async function POST(request: Request) {
       mode: body.mode ?? "use-what-i-have",
       typeFilter: body.typeFilter ?? "All",
       excludeIds: body.excludeIds ?? [],
+      excludeNames: body.excludeNames ?? [],
+      excludeUrls: body.excludeUrls ?? [],
     });
 
     return NextResponse.json(suggestion);

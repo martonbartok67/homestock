@@ -141,6 +141,8 @@ export async function suggestRecipeFromInventory({
   mode = "use-what-i-have",
   typeFilter = "All",
   excludeIds = [],
+  excludeNames = [],
+  excludeUrls = [],
 }: {
   inventory: InventoryItem[];
   recipes: Recipe[];
@@ -148,6 +150,8 @@ export async function suggestRecipeFromInventory({
   mode?: string;
   typeFilter?: string;
   excludeIds?: string[];
+  excludeNames?: string[];
+  excludeUrls?: string[];
 }) {
   // Local match — skip if excludeIds already contains it
   const localRecipe = ingredientNames ? undefined : bestLocalRecipe(
@@ -178,19 +182,23 @@ export async function suggestRecipeFromInventory({
   const typeHint = typeFilter === "savory" ? "savory dinner" : typeFilter === "sweet" ? "sweet dessert" : "";
 
   // Names to avoid — derived from excludeIds
-  const excludeNames = recipes
+  const savedExcludeNames = recipes
     .filter((r) => excludeIds.includes(r.id))
     .map((r) => r.name);
-  const avoidClause = excludeNames.length > 0
-    ? `Do not suggest any of these recipes: ${excludeNames.join(", ")}.`
+  const namesToAvoid = [...new Set([...savedExcludeNames, ...excludeNames])].slice(0, 30);
+  const normalizedExcludeUrls = new Set(excludeUrls.map((url) => url.trim().toLowerCase()).filter(Boolean));
+  const avoidClause = namesToAvoid.length > 0
+    ? `Do not suggest any of these recipes: ${namesToAvoid.join(", ")}.`
     : "";
 
   // Tier 1: Web search (Brave / Tavily / SerpAPI / DuckDuckGo) → scrape URL
   // Tries each candidate URL until one scrapes successfully
-  const recipeUrls = await searchRecipeUrls(ingredients, typeHint, excludeNames).catch(() => [] as string[]);
+  const recipeUrls = await searchRecipeUrls(ingredients, typeHint, namesToAvoid, excludeUrls).catch(() => [] as string[]);
   for (const url of recipeUrls) {
+    if (normalizedExcludeUrls.has(url.trim().toLowerCase())) continue;
     try {
       const imported = await importRecipeFromUrl(url);
+      if (normalizedExcludeUrls.has(imported.sourceUrl?.trim().toLowerCase() ?? "")) continue;
       return { source: "web" as const, recipe: imported };
     } catch {
       // This URL failed (blocked, paywall, SSRF) — try next

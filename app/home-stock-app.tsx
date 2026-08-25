@@ -211,6 +211,8 @@ export default function Home() {
   const [suggestionSource, setSuggestionSource] = useState<RecipeSuggestionSource | null>(null);
   const [suggestionStatus, setSuggestionStatus] = useState("");
   const [isSuggestingRecipe, setIsSuggestingRecipe] = useState(false);
+  const shownOnlineRecipeNames = useRef<string[]>([]);
+  const shownOnlineRecipeUrls = useRef<string[]>([]);
   const toastTimer = useRef<number | undefined>(undefined);
   const greeting = useCurrentGreeting(welcomeProfile);
 
@@ -371,11 +373,18 @@ export default function Home() {
       const response = await householdFetch("/api/recipes/suggest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({
+          excludeNames: shownOnlineRecipeNames.current,
+          excludeUrls: shownOnlineRecipeUrls.current,
+        }),
       });
       const body = await response.json() as { source?: RecipeSuggestionSource; recipe?: Recipe | Omit<Recipe, "id">; error?: string };
       if (!response.ok || !body.recipe || !body.source) throw new Error(body.error ?? "Could not suggest a recipe.");
       const recipe = "id" in body.recipe ? body.recipe : { ...body.recipe, id: makeId("web") };
+      if (body.source !== "local") {
+        shownOnlineRecipeNames.current = [...shownOnlineRecipeNames.current, recipe.name].slice(-30);
+        if (recipe.sourceUrl) shownOnlineRecipeUrls.current = [...shownOnlineRecipeUrls.current, recipe.sourceUrl].slice(-30);
+      }
       setSuggestedRecipe(recipe);
       setSuggestionSource(body.source);
       setSuggestionStatus(body.source === "local" ? "You already have a saved recipe you can make." : body.source === "web" ? "Found a real recipe online with a source link." : "A real web recipe wasn’t available, so this is an AI idea without a source link.");

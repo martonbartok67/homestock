@@ -138,24 +138,28 @@ export async function searchRecipeUrls(
   ingredients: string[],
   typeHint = "",
   excludeNames: string[] = [],
+  excludeUrls: string[] = [],
 ): Promise<string[]> {
   const avoidPart = excludeNames.length > 0 ? ` -"${excludeNames[0]}"` : "";
+  const excluded = new Set(excludeUrls.map((url) => url.trim().toLowerCase()).filter(Boolean));
   const query = `${typeHint || "dinner"} recipe using ${ingredients.slice(0, 5).join(", ")}${avoidPart}`;
   const seen = new Set<string>();
   const results: string[] = [];
+  const addResult = (url: string) => {
+    if (!excluded.has(url.trim().toLowerCase()) && !seen.has(url)) {
+      seen.add(url);
+      results.push(url);
+    }
+  };
 
   // Multi-result providers first for more candidates
-  for (const url of await searchBraveAll(query)) {
-    if (!seen.has(url)) { seen.add(url); results.push(url); }
-  }
-  for (const url of await searchSerpAll(query)) {
-    if (!seen.has(url)) { seen.add(url); results.push(url); }
-  }
+  for (const url of await searchBraveAll(query)) addResult(url);
+  for (const url of await searchSerpAll(query)) addResult(url);
   // Single-result fallbacks
   if (results.length < 3) {
     for (const provider of [searchTavily, searchDuckDuckGo]) {
       const url = await provider(query);
-      if (url && !seen.has(url)) { seen.add(url); results.push(url); }
+      if (url) addResult(url);
     }
   }
   // Shuffle so repeated calls with same ingredients vary
