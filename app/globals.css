@@ -688,10 +688,11 @@ body { background: var(--paper); color: var(--ink); }
   .recipe-heading-actions .primary-button { width: 100%; min-width: 0; justify-content: center; text-align: center; }
   .page-intro .primary-button { display: inline-flex !important; margin-top: 0; }
   .page-intro { flex-direction: column; align-items: flex-start; }
-  .item-row { grid-template-columns: 30px minmax(0, 1fr) minmax(104px, auto); gap: 10px; align-items: center; }
-  .item-expiry { min-width: 104px; gap: 5px; }
+  .item-row { grid-template-columns: 30px minmax(0, 1fr) minmax(104px, auto); gap: 11px; align-items: center; }
+  .item-expiry { min-width: 104px; gap: 6px; }
   .item-expiry > span:last-child { white-space: nowrap; }
-  .row-actions { grid-column: 2 / -1; justify-content: flex-end; padding: 0 0 8px; }
-  .item-row:not(.compact) { padding: 7px 0; }
-  .inventory-table .item-row .row-actions { display: flex; }
+  .item-row:not(.compact) { padding: 11px 0; }
+  .row-actions { grid-column: 2 / -1; justify-content: flex-end; padding: 4px 0 2px; }
+  .inventory-table .item-row .row-actions { display: none; }
+  .inventory-table .item-row.tapped .row-actions { display: flex; }
 }
