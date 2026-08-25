@@ -18,6 +18,7 @@ export async function POST(request: Request) {
       excludeIds?: string[];
       excludeNames?: string[];
       excludeUrls?: string[];
+      excludeFamilies?: string[];
     };
     const snapshot = await getSnapshot(householdId);
     const suggestion = await suggestRecipeFromInventory({
@@ -28,6 +29,7 @@ export async function POST(request: Request) {
       excludeIds: body.excludeIds ?? [],
       excludeNames: body.excludeNames ?? [],
       excludeUrls: body.excludeUrls ?? [],
+      excludeFamilies: body.excludeFamilies ?? [],
     });
 
     return NextResponse.json(suggestion);

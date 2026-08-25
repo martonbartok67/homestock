@@ -134,6 +134,31 @@ function quotaBlocked(message: string) {
   return /quota|rate|billing|RESOURCE_EXHAUSTED/i.test(message);
 }
 
+function fallbackRecipeFamily(name: string) {
+  return name.toLocaleLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\b(classic|easy|quick|best|homemade|healthy|simple|creamy|spicy|one pot|three cheese|cheesy)\b/gu, " ").replace(/\s+/g, " ").trim().slice(0, 100);
+}
+
+async function classifyRecipeFamily(apiKey: string | undefined, recipeName: string, excludedNames: string[], excludedFamilies: string[]) {
+  const fallback = fallbackRecipeFamily(recipeName);
+  if (!apiKey) return { family: fallback, duplicate: excludedFamilies.includes(fallback) };
+  const response = await callGemini(apiKey, {
+    contents: [{ parts: [{ text: [
+      "Classify recipe identity, not website or wording.",
+      "Recipes are duplicates when they are the same core dish with ordinary variations, such as different cheeses, spices, or sources.",
+      "Return only JSON: {\"family\": string, \"duplicate\": boolean}.",
+      `Candidate: ${recipeName}`,
+      `Previously shown recipe names: ${excludedNames.slice(0, 30).join(" | ") || "none"}`,
+      `Previously shown recipe families: ${excludedFamilies.slice(0, 30).join(" | ") || "none"}`,
+      "Use a short canonical family such as mac and cheese, chicken curry, or apple pie.",
+    ].join("\\n") }] }],
+    generationConfig: { temperature: 0, maxOutputTokens: 120, responseMimeType: "application/json" },
+  });
+  if (!response.response.ok) return { family: fallback, duplicate: excludedFamilies.includes(fallback) };
+  const result = parseJsonObject(response.body.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("").trim() ?? "{}");
+  const family = cleanText(result.family, fallback).toLocaleLowerCase();
+  return { family, duplicate: result.duplicate === true };
+}
+
 export async function suggestRecipeFromInventory({
   inventory,
   recipes,
@@ -143,6 +168,7 @@ export async function suggestRecipeFromInventory({
   excludeIds = [],
   excludeNames = [],
   excludeUrls = [],
+  excludeFamilies = [],
 }: {
   inventory: InventoryItem[];
   recipes: Recipe[];
@@ -152,6 +178,7 @@ export async function suggestRecipeFromInventory({
   excludeIds?: string[];
   excludeNames?: string[];
   excludeUrls?: string[];
+  excludeFamilies?: string[];
 }) {
   // Local match — skip if excludeIds already contains it
   const localRecipe = ingredientNames ? undefined : bestLocalRecipe(
@@ -187,9 +214,14 @@ export async function suggestRecipeFromInventory({
     .map((r) => r.name);
   const namesToAvoid = [...new Set([...savedExcludeNames, ...excludeNames])].slice(0, 30);
   const normalizedExcludeUrls = new Set(excludeUrls.map((url) => url.trim().toLowerCase()).filter(Boolean));
+  const normalizedExcludeFamilies = excludeFamilies.map((family) => family.trim().toLowerCase()).filter(Boolean);
   const avoidClause = namesToAvoid.length > 0
     ? `Do not suggest any of these recipes: ${namesToAvoid.join(", ")}.`
     : "";
+  const familyAvoidClause = normalizedExcludeFamilies.length > 0
+    ? `Do not suggest the same core dish as these recipe families, even with a different title, cheese, spice, or website: ${normalizedExcludeFamilies.join(", ")}.`
+    : "";
+  const apiKey = process.env.GEMINI_API_KEY;
 
   // Tier 1: Web search (Brave / Tavily / SerpAPI / DuckDuckGo) → scrape URL
   // Tries each candidate URL until one scrapes successfully
@@ -199,14 +231,15 @@ export async function suggestRecipeFromInventory({
     try {
       const imported = await importRecipeFromUrl(url);
       if (normalizedExcludeUrls.has(imported.sourceUrl?.trim().toLowerCase() ?? "")) continue;
-      return { source: "web" as const, recipe: imported };
+      const classification = await classifyRecipeFamily(apiKey, imported.name, namesToAvoid, normalizedExcludeFamilies);
+      if (classification.duplicate) continue;
+      return { source: "web" as const, recipe: imported, family: classification.family };
     } catch {
       // This URL failed (blocked, paywall, SSRF) — try next
       continue;
     }
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("Gemini key is missing.");
 
   const groundedRequest = {
@@ -217,6 +250,7 @@ export async function suggestRecipeFromInventory({
           "Do not invent a recipe.",
           `Choose a practical ${typeHint || "dinner"} recipe based on the household's available ingredients.`,
           ...(avoidClause ? [avoidClause] : []),
+          ...(familyAvoidClause ? [familyAvoidClause] : []),
           "Use these available ingredients first:",
           ingredients.join(", "),
           "You may assume basic pantry staples only: water, salt, pepper, and a small amount of oil.",
@@ -239,12 +273,14 @@ export async function suggestRecipeFromInventory({
     if (grounded.response.ok) {
       const text = grounded.body.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("").trim();
       if (!text) throw new Error("Gemini returned an empty recipe.");
-      return { source: "web" as const, recipe: normalizeRecipe(parseJsonObject(text), { fallbackSource: firstWebSource(grounded.body), requireSource: true }) };
+      const recipe = normalizeRecipe(parseJsonObject(text), { fallbackSource: firstWebSource(grounded.body), requireSource: true });
+      const classification = await classifyRecipeFamily(apiKey, recipe.name, namesToAvoid, normalizedExcludeFamilies);
+      if (!classification.duplicate) return { source: "web" as const, recipe, family: classification.family };
+    } else {
+      const groundedMessage = grounded.body.error?.message ?? "Gemini could not search for a recipe.";
+      if (!quotaBlocked(groundedMessage)) throw new Error(groundedMessage);
+      groundingUnavailableUntil = Date.now() + groundingRetryDelayMs;
     }
-
-    const groundedMessage = grounded.body.error?.message ?? "Gemini could not search for a recipe.";
-    if (!quotaBlocked(groundedMessage)) throw new Error(groundedMessage);
-    groundingUnavailableUntil = Date.now() + groundingRetryDelayMs;
   }
 
   const aiIdeaRequest = {
@@ -253,6 +289,7 @@ export async function suggestRecipeFromInventory({
         text: [
           `Create exactly one practical ${typeHint || "dinner"} recipe idea.`,
           "This is a fallback because real Google Search recipe scouting is unavailable.",
+          ...(familyAvoidClause ? [familyAvoidClause] : []),
           ...(avoidClause ? [avoidClause] : []),
           "Use these available ingredients first:",
           ingredients.join(", "),
@@ -276,5 +313,8 @@ export async function suggestRecipeFromInventory({
   const text = aiIdea.body.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("").trim();
   if (!text) throw new Error("Gemini returned an empty recipe.");
 
-  return { source: "ai" as const, recipe: normalizeRecipe(parseJsonObject(text), { requireSource: false }) };
+  const recipe = normalizeRecipe(parseJsonObject(text), { requireSource: false });
+  const classification = await classifyRecipeFamily(apiKey, recipe.name, namesToAvoid, normalizedExcludeFamilies);
+  if (classification.duplicate) throw new Error("I found the same kind of dish again. Please try once more.");
+  return { source: "ai" as const, recipe, family: classification.family };
 }

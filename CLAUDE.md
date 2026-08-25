@@ -37,7 +37,7 @@ app/
     home-stock/route.ts  # Main GET/POST API — all inventory/shopping/recipe actions
     recipes/
       import/route.ts    # POST — scrape recipe from URL
-      suggest/route.ts   # POST — AI/web recipe suggestion (mode, typeFilter, excludeIds, excludeNames, excludeUrls)
+      suggest/route.ts   # POST — AI/web recipe suggestion (mode, typeFilter, excludeIds, excludeNames, excludeUrls, excludeFamilies)
 
 db/
   schema.ts              # Drizzle schema definitions — single source of truth for table shape

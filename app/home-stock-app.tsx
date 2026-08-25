@@ -213,6 +213,7 @@ export default function Home() {
   const [isSuggestingRecipe, setIsSuggestingRecipe] = useState(false);
   const shownOnlineRecipeNames = useRef<string[]>([]);
   const shownOnlineRecipeUrls = useRef<string[]>([]);
+  const shownOnlineRecipeFamilies = useRef<string[]>([]);
   const toastTimer = useRef<number | undefined>(undefined);
   const greeting = useCurrentGreeting(welcomeProfile);
 
@@ -376,14 +377,16 @@ export default function Home() {
         body: JSON.stringify({
           excludeNames: shownOnlineRecipeNames.current,
           excludeUrls: shownOnlineRecipeUrls.current,
+           excludeFamilies: shownOnlineRecipeFamilies.current,
         }),
       });
-      const body = await response.json() as { source?: RecipeSuggestionSource; recipe?: Recipe | Omit<Recipe, "id">; error?: string };
+      const body = await response.json() as { source?: RecipeSuggestionSource; recipe?: Recipe | Omit<Recipe, "id">; family?: string; error?: string };
       if (!response.ok || !body.recipe || !body.source) throw new Error(body.error ?? "Could not suggest a recipe.");
       const recipe = "id" in body.recipe ? body.recipe : { ...body.recipe, id: makeId("web") };
       if (body.source !== "local") {
         shownOnlineRecipeNames.current = [...shownOnlineRecipeNames.current, recipe.name].slice(-30);
         if (recipe.sourceUrl) shownOnlineRecipeUrls.current = [...shownOnlineRecipeUrls.current, recipe.sourceUrl].slice(-30);
+        if (body.family) shownOnlineRecipeFamilies.current = [...shownOnlineRecipeFamilies.current, body.family].slice(-30);
       }
       setSuggestedRecipe(recipe);
       setSuggestionSource(body.source);
@@ -509,7 +512,7 @@ function RecipesView({ mode, setMode, tagFilter, setTagFilter, typeFilter, setTy
       {!suggestedRecipe && <div className="online-suggestion-actions"><button className="secondary-button" onClick={onSuggest} disabled={isSuggesting}>{isSuggesting ? "Searching..." : "Try again"}</button></div>}
       {suggestedRecipe && <div className="online-suggestion-actions"><button className="secondary-button" onClick={onOpenSuggestion}>View recipe</button>{(suggestionSource === "web" || suggestionSource === "ai") && <button className="text-button" onClick={onSaveSuggestion}>Save recipe</button>}</div>}
     </section>}
-    <div className="recipe-controls"><div className="recipe-filter-row">{([["use-soon", "Cook with expiring items"], ["use-what-i-have", "Use what I have"], ["minimal-shopping", "Minimal shopping"]] as [RecipeMode, string][]).map(([id, label]) => <button key={id} className={mode === id ? "active" : ""} onClick={() => setMode(id)}>{label}</button>)}</div><div className="recipe-filter-row"><button className={typeFilter === "All" ? "active" : ""} onClick={() => setTypeFilter("All")}>All</button><button className={typeFilter === "savory" ? "active" : ""} onClick={() => setTypeFilter("savory")}>Savory</button><button className={typeFilter === "sweet" ? "active" : ""} onClick={() => setTypeFilter("sweet")}>Sweet</button></div></div>
+    <div className="recipe-controls"><div className="recipe-control-group"><span className="recipe-control-label">Plan around</span><div className="recipe-filter-row">{([["use-soon", "◷", "Use soon"], ["use-what-i-have", "✓", "What I have"], ["minimal-shopping", "⌁", "Less shopping"]] as [RecipeMode, string, string][]).map(([id, icon, label]) => <button key={id} className={mode === id ? "active" : ""} onClick={() => setMode(id)}><span aria-hidden="true">{icon}</span>{label}</button>)}</div></div><div className="recipe-control-group recipe-type-group"><span className="recipe-control-label">Recipe mood</span><div className="recipe-filter-row"><button className={typeFilter === "All" ? "active" : ""} onClick={() => setTypeFilter("All")}>All</button><button className={typeFilter === "savory" ? "active" : ""} onClick={() => setTypeFilter("savory")}>Savory</button><button className={typeFilter === "sweet" ? "active" : ""} onClick={() => setTypeFilter("sweet")}>Sweet</button></div></div></div>
     <div className="recipe-grid">{sorted.length ? sorted.map((recipe) => <RecipeCard key={recipe.id} recipe={recipe} inventory={inventory} onOpen={() => onOpen(recipe)} onEdit={() => onEdit(recipe)} onDelete={() => onDelete(recipe)} onAddMissing={() => onAddMissing(recipe)} />) : <EmptyState title={recipeList.length ? "No recipes match that tag" : "No recipes yet"} body={recipeList.length ? "Choose another tag or add a new recipe." : "Add your own recipes in English or Hungarian."} action={<button className="secondary-button" onClick={onAdd}>＋ Add recipe</button>} />}</div>
   </div>;
 }

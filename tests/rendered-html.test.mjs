@@ -28,7 +28,8 @@ test("HomeStock is wired to the Turso-backed API", async () => {
   assert.match(page, /Find real recipe online/);
   assert.match(page, /AI idea fallback/);
   assert.match(page, /not a recipe copied from a website/);
-  assert.match(page, /Tag<select/);
+  assert.match(page, /recipe-control-label/);
+  assert.match(page, /Recipe mood/);
   assert.match(page, /Edit recipe/);
   assert.match(page, /Delete \$\{recipe\.name\}/);
   assert.match(page, /household\.name/);
@@ -69,7 +70,9 @@ test("HomeStock is wired to the Turso-backed API", async () => {
   assert.match(suggestionHelper, /google_search/);
   assert.match(suggestionHelper, /sourceUrl must be the real recipe page/);
   assert.match(suggestionHelper, /AI recipe idea/);
-  assert.match(suggestionHelper, /return \{ source: "ai"/);
+  assert.match(suggestionHelper, /source: "ai"/);
+  assert.match(suggestionHelper, /classifyRecipeFamily/);
+  assert.match(suggestionHelper, /excludeFamilies/);
   assert.match(schema, /inventory_items/);
   assert.match(schema, /shopping_list_items/);
   assert.match(schema, /recipe_ingredients/);
