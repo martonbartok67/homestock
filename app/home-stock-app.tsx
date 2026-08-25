@@ -96,7 +96,7 @@ function sourceHostname(sourceUrl?: string) {
   }
 }
 
-function IconButton({ label, children, onClick, className = "" }: { label: string; children: React.ReactNode; onClick?: () => void; className?: string }) {
+function IconButton({ label, children, onClick, onPointerDown, onPointerUp, onPointerLeave, className = "" }: { label: string; children: React.ReactNode; onClick?: () => void; onPointerDown?: () => void; onPointerUp?: () => void; onPointerLeave?: () => void; className?: string }) {
   return <button type="button" aria-label={label} title={label} className={`icon-button ${className}`} onClick={onClick}>{children}</button>;
 }
 
@@ -130,6 +130,27 @@ function StatusPill({ status }: { status: ReturnType<typeof getExpiryStatus> }) 
   return <span className={`status-pill ${copy.className}`}><span className="status-dot" />{copy.label}</span>;
 }
 
+
+// Long-press hook — shows tooltip on short tap, fires action on hold (500ms)
+function useLongPress(onLongPress: () => void, tooltip: string, ms = 500) {
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [hint, setHint] = useState("");
+  const start = () => {
+    timer.current = setTimeout(() => { setHint(""); onLongPress(); }, ms);
+  };
+  const cancel = () => {
+    if (timer.current) { clearTimeout(timer.current); timer.current = null; }
+  };
+  const tap = () => { cancel(); setHint(tooltip); setTimeout(() => setHint(""), 2000); };
+  return {
+    onPointerDown: start,
+    onPointerUp: cancel,
+    onPointerLeave: cancel,
+    onClick: tap,
+    hint,
+  };
+}
+
 function ItemRow({ item, onFinish, onDelete, onEdit = () => {}, onEditExpiry, compact = false }: { item: InventoryItem; onFinish: () => void; onDelete: () => void; onEdit?: () => void; onEditExpiry: () => void; compact?: boolean }) {
   const status = getExpiryStatus(item.expiry);
   const pressTimer = useRef<number | undefined>(undefined);
@@ -139,7 +160,7 @@ function ItemRow({ item, onFinish, onDelete, onEdit = () => {}, onEditExpiry, co
     <div className={`category-mark category-${item.category.toLowerCase()}`}>{item.category === "Fridge" ? "❄" : item.category === "Pantry" ? "▤" : item.category === "Freezer" ? "◌" : "•"}</div>
     <div className="item-main" onDoubleClick={onEdit}><div className="item-title-line"><strong>{item.name}</strong>{item.basic && <span className="basic-tag">Basic</span>}</div><span className="item-meta">{item.quantity} {item.unit} · {item.location}</span></div>
     <div className="item-expiry"><StatusPill status={status} /><span>{expiryLabel(item.expiry)}</span><button type="button" className="expiry-edit-button" onClick={(event) => { event.stopPropagation(); onEditExpiry(); }}>{item.expiry ? "Edit date" : "Add date"}</button></div>
-    {!compact && <div className="row-actions"><IconButton label={`Edit ${item.name}`} className="edit-item-button" onClick={onEdit}>✎</IconButton><IconButton label={`Mark ${item.name} finished`} onClick={onFinish}>✓</IconButton><IconButton label={`Delete ${item.name}`} onClick={onDelete}>×</IconButton></div>}
+    
   </div>;
 }
 
@@ -475,7 +496,7 @@ function RecipesView({ mode, setMode, tagFilter, setTagFilter, recipes: recipeLi
       <div><span>{suggestionSource === "web" ? "Real online recipe" : suggestionSource === "ai" ? "AI idea fallback" : suggestionSource === "local" ? "Saved recipe match" : "Online recipe search"}</span><strong>{suggestedRecipe?.name ?? suggestionStatus}</strong>{suggestedRecipe && <p>{recipeDescription(suggestedRecipe, suggestionSource)}</p>}{suggestionStatus && suggestedRecipe && <small>{suggestionStatus}</small>}{suggestedRecipe?.sourceUrl && <small>Source: {sourceHostname(suggestedRecipe.sourceUrl)}</small>}</div>
       {suggestedRecipe && <div className="online-suggestion-actions"><button className="secondary-button" onClick={onOpenSuggestion}>View recipe</button>{(suggestionSource === "web" || suggestionSource === "ai") && <button className="text-button" onClick={onSaveSuggestion}>Save recipe</button>}</div>}
     </section>}
-    <div className="recipe-controls"><div className="mode-tabs">{([["use-soon", "Cook with expiring items"], ["use-what-i-have", "Use what I have"], ["minimal-shopping", "Minimal shopping"]] as [RecipeMode, string][]).map(([id, label]) => <button key={id} className={mode === id ? "active" : ""} onClick={() => setMode(id)}>{label}</button>)}</div><label className="tag-filter">Tag<select value={activeTag} onChange={(event) => setTagFilter(event.target.value)}>{tagOptions.map((tag) => <option key={tag}>{tag}</option>)}</select></label></div>
+    <div className="recipe-controls"><div className="recipe-filter-row">{([["use-soon", "Cook with expiring items"], ["use-what-i-have", "Use what I have"], ["minimal-shopping", "Minimal shopping"]] as [RecipeMode, string][]).map(([id, label]) => <button key={id} className={mode === id ? "active" : ""} onClick={() => setMode(id)}>{label}</button>)}</div><div className="recipe-filter-row"><button className={typeFilter === "All" ? "active" : ""} onClick={() => setTypeFilter("All")}>All</button><button className={typeFilter === "savory" ? "active" : ""} onClick={() => setTypeFilter("savory")}>Savory</button><button className={typeFilter === "sweet" ? "active" : ""} onClick={() => setTypeFilter("sweet")}>Sweet</button></div></div>
     <div className="recipe-grid">{sorted.length ? sorted.map((recipe) => <RecipeCard key={recipe.id} recipe={recipe} inventory={inventory} onOpen={() => onOpen(recipe)} onEdit={() => onEdit(recipe)} onDelete={() => onDelete(recipe)} onAddMissing={() => onAddMissing(recipe)} />) : <EmptyState title={recipeList.length ? "No recipes match that tag" : "No recipes yet"} body={recipeList.length ? "Choose another tag or add a new recipe." : "Add your own recipes in English or Hungarian."} action={<button className="secondary-button" onClick={onAdd}>＋ Add recipe</button>} />}</div>
   </div>;
 }

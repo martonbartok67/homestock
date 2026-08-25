@@ -158,5 +158,7 @@ export async function searchRecipeUrls(
       if (url && !seen.has(url)) { seen.add(url); results.push(url); }
     }
   }
+  // Shuffle so repeated calls with same ingredients vary
+  results.sort(() => Math.random() - 0.5);
   return results.slice(0, 8);
 }
