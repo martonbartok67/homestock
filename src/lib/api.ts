@@ -1,4 +1,5 @@
 import { Settings } from '@/types';
+import axios from 'axios';
 
 export const getHouseholdSettings = async (householdId: string): Promise<Settings> => {
   const response = await fetch(`/api/households/${householdId}/settings`);
