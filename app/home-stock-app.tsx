@@ -21,6 +21,7 @@ import { getPersonalGreeting, type WelcomeProfile } from "../lib/welcome";
 
 type View = "dashboard" | "inventory" | "expiring" | "shopping" | "recipes" | "settings";
 type RecipeMode = "use-soon" | "use-what-i-have" | "minimal-shopping";
+type RecipeTypeFilter = "All" | Recipe["recipeType"];
 type RecipeSuggestionSource = "local" | "web" | "ai";
 type HouseholdSummary = { id: string; name: string; memberCount: number };
 type HouseholdLoadStatus = "loading" | "ready" | "unassigned" | "error";
@@ -199,6 +200,7 @@ export default function Home() {
   const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null);
   const [recipeMode, setRecipeMode] = useState<RecipeMode>("use-soon");
   const [recipeTagFilter, setRecipeTagFilter] = useState("All");
+  const [recipeTypeFilter, setRecipeTypeFilter] = useState<RecipeTypeFilter>("All");
   const [activeRecipe, setActiveRecipe] = useState<Recipe | null>(null);
   const [toast, setToast] = useState("");
   const [recipeList, setRecipeList] = useState<Recipe[]>([]);
@@ -401,7 +403,7 @@ export default function Home() {
     if (view === "inventory") return <InventoryView inventory={filteredInventory} query={query} setQuery={setQuery} categoryFilter={categoryFilter} setCategoryFilter={setCategoryFilter} onAdd={() => setShowAdd(true)} onFinish={finishItem} onDelete={deleteItem} onEdit={setEditingInventoryItem} onEditExpiry={setEditingExpiryItem} />;
     if (view === "expiring") return <ExpiringView items={expiring} onFinish={finishItem} onDelete={deleteItem} onAdd={() => setShowAdd(true)} onEdit={setEditingInventoryItem} onEditExpiry={setEditingExpiryItem} />;
     if (view === "shopping") return <ShoppingView shopping={shopping} onToggle={toggleShopping} onRemove={removeShopping} onAdd={(name) => addShopping(name)} />;
-    if (view === "recipes") return <RecipesView mode={recipeMode} setMode={setRecipeMode} tagFilter={recipeTagFilter} setTagFilter={setRecipeTagFilter} recipes={recipeList} inventory={inventory} suggestedRecipe={suggestedRecipe} suggestionSource={suggestionSource} suggestionStatus={suggestionStatus} isSuggesting={isSuggestingRecipe} onSuggest={suggestOnlineRecipe} onOpen={setActiveRecipe} onOpenSuggestion={() => suggestedRecipe && setActiveRecipe(suggestedRecipe)} onSaveSuggestion={saveSuggestedRecipe} onEdit={setEditingRecipe} onDelete={deleteRecipe} onAddMissing={addMissing} onAdd={() => setShowRecipeForm(true)} />;
+    if (view === "recipes") return <RecipesView mode={recipeMode} setMode={setRecipeMode} tagFilter={recipeTagFilter} setTagFilter={setRecipeTagFilter} typeFilter={recipeTypeFilter} setTypeFilter={setRecipeTypeFilter} recipes={recipeList} inventory={inventory} suggestedRecipe={suggestedRecipe} suggestionSource={suggestionSource} suggestionStatus={suggestionStatus} isSuggesting={isSuggestingRecipe} onSuggest={suggestOnlineRecipe} onOpen={setActiveRecipe} onOpenSuggestion={() => suggestedRecipe && setActiveRecipe(suggestedRecipe)} onSaveSuggestion={saveSuggestedRecipe} onEdit={setEditingRecipe} onDelete={deleteRecipe} onAddMissing={addMissing} onAdd={() => setShowRecipeForm(true)} />;
     if (view === "settings") return <SettingsView householdName={household?.name ?? "Your household"} memberCount={household?.memberCount} inventory={inventory} shopping={shopping} recipes={recipeList} />;
     return <Dashboard inventory={inventory} expiring={expiring} basics={basics} shopping={shopping} recipes={recipeList} greeting={greeting} onAdd={() => setShowAdd(true)} onView={setView} onFinish={finishItem} onDelete={deleteItem} onRecipe={() => setView("recipes")} onAddShopping={(item) => addShopping(item.name, item.category, "inventory")} />;
   };
@@ -471,10 +473,11 @@ function recipeDescription(recipe: Recipe, source: RecipeSuggestionSource | null
   return recipe.description;
 }
 
-function RecipesView({ mode, setMode, tagFilter, setTagFilter, recipes: recipeList, inventory, suggestedRecipe, suggestionSource, suggestionStatus, isSuggesting, onSuggest, onOpen, onOpenSuggestion, onSaveSuggestion, onEdit, onDelete, onAddMissing, onAdd }: { mode: RecipeMode; setMode: (mode: RecipeMode) => void; tagFilter: string; setTagFilter: (tag: string) => void; recipes: Recipe[]; inventory: InventoryItem[]; suggestedRecipe: Recipe | null; suggestionSource: RecipeSuggestionSource | null; suggestionStatus: string; isSuggesting: boolean; onSuggest: () => void; onOpen: (recipe: Recipe) => void; onOpenSuggestion: () => void; onSaveSuggestion: () => void; onEdit: (recipe: Recipe) => void; onDelete: (recipe: Recipe) => void; onAddMissing: (recipe: Recipe) => void; onAdd: () => void }) {
+function RecipesView({ mode, setMode, tagFilter, setTagFilter, typeFilter, setTypeFilter, recipes: recipeList, inventory, suggestedRecipe, suggestionSource, suggestionStatus, isSuggesting, onSuggest, onOpen, onOpenSuggestion, onSaveSuggestion, onEdit, onDelete, onAddMissing, onAdd }: { mode: RecipeMode; setMode: (mode: RecipeMode) => void; tagFilter: string; setTagFilter: (tag: string) => void; typeFilter: RecipeTypeFilter; setTypeFilter: (type: RecipeTypeFilter) => void; recipes: Recipe[]; inventory: InventoryItem[]; suggestedRecipe: Recipe | null; suggestionSource: RecipeSuggestionSource | null; suggestionStatus: string; isSuggesting: boolean; onSuggest: () => void; onOpen: (recipe: Recipe) => void; onOpenSuggestion: () => void; onSaveSuggestion: () => void; onEdit: (recipe: Recipe) => void; onDelete: (recipe: Recipe) => void; onAddMissing: (recipe: Recipe) => void; onAdd: () => void }) {
   const tagOptions = ["All", ...Array.from(new Set(recipeList.flatMap((recipe) => [...recipe.tags, ...(recipe.tagsHu ?? [])]).filter(Boolean))).sort((a, b) => a.localeCompare(b))];
   const activeTag = tagOptions.includes(tagFilter) ? tagFilter : "All";
-  const filtered = activeTag === "All" ? recipeList : recipeList.filter((recipe) => [...recipe.tags, ...(recipe.tagsHu ?? [])].some((tag) => tag.toLocaleLowerCase() === activeTag.toLocaleLowerCase()));
+  const filteredByTag = activeTag === "All" ? recipeList : recipeList.filter((recipe) => [...recipe.tags, ...(recipe.tagsHu ?? [])].some((tag) => tag.toLocaleLowerCase() === activeTag.toLocaleLowerCase()));
+  const filtered = typeFilter === "All" ? filteredByTag : filteredByTag.filter((recipe) => recipe.recipeType === typeFilter);
   const expiringInventory = inventory.filter((item) => ["expired", "urgent", "warning"].includes(getExpiryStatus(item.expiry)));
   const sorted = [...filtered].sort((a, b) => {
     const aMissing = missingIngredients(a, inventory).length;
