@@ -33,6 +33,7 @@ export const inventoryItems = sqliteTable(
     expiry: text("expiry"),
     purchaseDate: text("purchase_date"),
     notes: text("notes"),
+    barcode: text("barcode"),
     basic: integer("basic", { mode: "boolean" }).notNull().default(false),
     createdAt: text("created_at").notNull(),
   },

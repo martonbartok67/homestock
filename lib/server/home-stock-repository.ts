@@ -17,7 +17,7 @@ import type {
 const schemaStatements = [
   `CREATE TABLE IF NOT EXISTS households (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, created_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS household_members (id TEXT PRIMARY KEY NOT NULL, household_id TEXT NOT NULL, email TEXT NOT NULL, created_at TEXT NOT NULL)`,
-  `CREATE TABLE IF NOT EXISTS inventory_items (id TEXT PRIMARY KEY NOT NULL, household_id TEXT NOT NULL, name TEXT NOT NULL, category TEXT NOT NULL, location TEXT NOT NULL, quantity INTEGER NOT NULL DEFAULT 1, unit TEXT NOT NULL, expiry TEXT, purchase_date TEXT, notes TEXT, basic INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS inventory_items (id TEXT PRIMARY KEY NOT NULL, household_id TEXT NOT NULL, name TEXT NOT NULL, category TEXT NOT NULL, location TEXT NOT NULL, quantity INTEGER NOT NULL DEFAULT 1, unit TEXT NOT NULL, expiry TEXT, purchase_date TEXT, notes TEXT, barcode TEXT, basic INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS shopping_list_items (id TEXT PRIMARY KEY NOT NULL, household_id TEXT NOT NULL, name TEXT NOT NULL, quantity TEXT NOT NULL DEFAULT '1', category TEXT NOT NULL, checked INTEGER NOT NULL DEFAULT 0, note TEXT, source TEXT NOT NULL DEFAULT 'manual', created_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS recipes (id TEXT PRIMARY KEY NOT NULL, household_id TEXT NOT NULL, name TEXT NOT NULL, name_hu TEXT, description TEXT NOT NULL, description_hu TEXT, source_url TEXT, time TEXT NOT NULL, difficulty TEXT NOT NULL, recipe_type TEXT NOT NULL DEFAULT 'savory', thumb_url TEXT, tags TEXT NOT NULL DEFAULT '[]', tags_hu TEXT NOT NULL DEFAULT '[]', steps TEXT NOT NULL DEFAULT '[]', steps_hu TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS recipe_ingredients (id TEXT PRIMARY KEY NOT NULL, household_id TEXT NOT NULL, recipe_id TEXT NOT NULL, ingredient_name TEXT NOT NULL, ingredient_name_hu TEXT, sort_order INTEGER NOT NULL DEFAULT 0)`,
@@ -121,6 +121,11 @@ async function ensureCurrentColumns() {
       "ALTER TABLE recipe_ingredients ADD COLUMN ingredient_name_hu TEXT",
     );
   }
+  const inventoryInfo = await client.execute("PRAGMA table_info(inventory_items)");
+  const inventoryColumns = new Set(inventoryInfo.rows.map((row) => String(row.name)));
+  if (!inventoryColumns.has("barcode")) {
+    statements.push("ALTER TABLE inventory_items ADD COLUMN barcode TEXT");
+  }
 
   if (statements.length > 0) await client.batch(statements);
   await client.batch(householdIndexStatements);
@@ -139,6 +144,7 @@ function mapInventory(
     expiry: row.expiry ?? undefined,
     purchaseDate: row.purchaseDate ?? undefined,
     notes: row.notes ?? undefined,
+    barcode: row.barcode ?? undefined,
     basic: row.basic,
   };
 }
@@ -312,6 +318,7 @@ export async function addInventoryItem(
     expiry: item.expiry ?? null,
     purchaseDate: item.purchaseDate ?? null,
     notes: item.notes ?? null,
+    barcode: item.barcode ?? null,
     basic: item.basic,
     createdAt: now(),
   });
@@ -336,6 +343,7 @@ export async function updateInventoryItem(
       expiry: item.expiry ?? null,
       purchaseDate: item.purchaseDate ?? null,
       notes: item.notes ?? null,
+      barcode: item.barcode ?? null,
       basic: item.basic,
     })
     .where(

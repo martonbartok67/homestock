@@ -1,0 +1,14 @@
+warning: in the working copy of '.gitignore', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/api/home-stock/route.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/globals.css', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/home-stock-app.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'db/index.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/server/home-stock-input.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/server/home-stock-repository.ts', LF will be replaced by CRLF the next time Git touches it
+.gitignore
+app/api/home-stock/route.ts
+app/globals.css
+app/home-stock-app.tsx
+db/index.ts
+lib/server/home-stock-input.ts
+lib/server/home-stock-repository.ts

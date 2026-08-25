@@ -11,6 +11,7 @@ export type InventoryItem = {
   expiry?: string;
   purchaseDate?: string;
   notes?: string;
+  barcode?: string;
   basic: boolean;
 };
 

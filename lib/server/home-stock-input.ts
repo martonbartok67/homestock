@@ -41,6 +41,14 @@ function optionalText(value: unknown, label: string, maxLength: number) {
   return text(value, label, maxLength);
 }
 
+function barcode(value: unknown) {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value !== "string" || !/^\d{8,14}$/.test(value.trim())) {
+    throw new RequestValidationError("Barcode must contain 8 to 14 digits.");
+  }
+  return value.trim();
+}
+
 function stringList(value: unknown, label: string, options: { maxItems: number; maxLength: number; required?: boolean }) {
   if (value === undefined || value === null) {
     if (options.required) throw new RequestValidationError(`${label} are required.`);
@@ -100,6 +108,7 @@ function inventoryItem(value: unknown): Omit<InventoryItem, "id"> {
     expiry: date(item.expiry, "Expiry date"),
     purchaseDate: date(item.purchaseDate, "Purchase date"),
     notes: optionalText(item.notes, "Notes", 1_000),
+    barcode: barcode(item.barcode),
     basic: item.basic,
   };
 }
@@ -123,7 +132,8 @@ function recipe(value: unknown): Omit<Recipe, "id"> {
   if (typeof input.difficulty !== "string" || !difficulties.has(input.difficulty as Recipe["difficulty"])) {
     throw new RequestValidationError("Choose a valid recipe difficulty.");
   }
-  if (typeof input.recipeType !== "string" || !recipeTypes.has(input.recipeType as Recipe["recipeType"])) {
+  const inputRecipeType = input.recipeType !== undefined ? input.recipeType : "savory";
+  if (typeof inputRecipeType !== "string" || !recipeTypes.has(inputRecipeType as Recipe["recipeType"])) {
     throw new RequestValidationError("Recipe type must be savory or sweet.");
   }
   return {
@@ -137,7 +147,7 @@ function recipe(value: unknown): Omit<Recipe, "id"> {
     ingredientsHu: stringList(input.ingredientsHu, "Hungarian ingredients", { maxItems: 80, maxLength: 300 }),
     time: text(input.time, "Recipe time", 40, "30 min"),
     difficulty: input.difficulty as Recipe["difficulty"],
-    recipeType: input.recipeType as Recipe["recipeType"],
+    recipeType: inputRecipeType as Recipe["recipeType"],
     tags: stringList(input.tags, "Tags", { maxItems: 8, maxLength: 60 }),
     tagsHu: stringList(input.tagsHu, "Hungarian tags", { maxItems: 8, maxLength: 60 }),
     steps: stringList(input.steps, "Recipe steps", { maxItems: 80, maxLength: 1_500, required: true }),
