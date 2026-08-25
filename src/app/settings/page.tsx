@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { getHouseholdSettings, updateHouseholdSettings } from '@/lib/api';
+import { Settings, Notification, UserType } from '@/types';
+import { NotificationType } from '@/components/Notifications/Notifications';;
+import { RootState } from '@/store';
+import { removeNotification } from '@/store/notificationsSlice';
+import { useDispatch, useSelector } from 'react-redux';
 
 interface Settings {
   notificationPreferences: {
