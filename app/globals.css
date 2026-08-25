@@ -667,8 +667,11 @@ body { background: var(--paper); color: var(--ink); }
 .item-row { position: relative; }
 
 /* Expiry area — vertical stack so pill and edit button don't fight */
-.item-expiry { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; min-width: 90px; }
-.expiry-edit-button { font-size: 9px; font-weight: 600; color: var(--sage-deep); background: var(--mint); border-radius: 4px; padding: 2px 6px; white-space: nowrap; }
+.item-expiry { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; min-width: 104px; }
+.expiry-edit-button { font-size: 9px; font-weight: 600; color: var(--sage-deep); background: var(--mint); border-radius: 6px; padding: 4px 8px; white-space: nowrap; }
+.item-main { position: relative; min-width: 0; }
+.row-actions { display: flex; opacity: 1; gap: 3px; }
+.row-actions .icon-button { width: 30px; height: 30px; }
 
 /* Recipe filter rows — sage color, no blue */
 .recipe-filter-row button { color: var(--muted); background: #f5f8f5; }
@@ -677,8 +680,18 @@ body { background: var(--paper); color: var(--ink); }
 
 /* Recipe heading on mobile — stack vertically */
 @media (max-width: 760px) {
-  .recipe-heading-actions { flex-wrap: wrap; gap: 8px; }
-  .recipe-heading-actions .secondary-button { flex: 1; min-width: 0; text-align: center; justify-content: center; font-size: 12px; }
-  .page-intro .primary-button { display: inline-flex !important; width: 100%; justify-content: center; margin-top: 6px; }
+  .app-shell { padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px)); }
+  .view-content { padding-bottom: calc(112px + env(safe-area-inset-bottom, 0px)); }
+  .mobile-nav { padding-top: 6px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
+  .recipe-heading-actions { width: 100%; flex-direction: column; align-items: stretch; gap: 8px; }
+  .recipe-heading-actions .secondary-button,
+  .recipe-heading-actions .primary-button { width: 100%; min-width: 0; justify-content: center; text-align: center; }
+  .page-intro .primary-button { display: inline-flex !important; margin-top: 0; }
   .page-intro { flex-direction: column; align-items: flex-start; }
+  .item-row { grid-template-columns: 30px minmax(0, 1fr) minmax(104px, auto); gap: 10px; align-items: center; }
+  .item-expiry { min-width: 104px; gap: 5px; }
+  .item-expiry > span:last-child { white-space: nowrap; }
+  .row-actions { grid-column: 2 / -1; justify-content: flex-end; padding: 0 0 8px; }
+  .item-row:not(.compact) { padding: 7px 0; }
+  .inventory-table .item-row .row-actions { display: flex; }
 }

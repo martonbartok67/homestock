@@ -154,14 +154,14 @@ function useLongPress(onLongPress: () => void, tooltip: string, ms = 500) {
 
 function ItemRow({ item, onFinish, onDelete, onEdit = () => {}, onEditExpiry, compact = false }: { item: InventoryItem; onFinish: () => void; onDelete: () => void; onEdit?: () => void; onEditExpiry: () => void; compact?: boolean }) {
   const status = getExpiryStatus(item.expiry);
-  const pressTimer = useRef<number | undefined>(undefined);
-  const clearPress = () => { if (pressTimer.current) window.clearTimeout(pressTimer.current); };
-  const startPress = () => { clearPress(); pressTimer.current = window.setTimeout(onEdit, 550); };
-  return <div className={`item-row ${status} ${compact ? "compact" : ""}`} onTouchStart={startPress} onTouchEnd={clearPress} onTouchMove={clearPress}>
+  const { onPointerDown, onPointerUp, onPointerLeave, onClick, hint } = useLongPress(onEdit, "Press and hold to edit", 550);
+  return <div className={`item-row ${status} ${compact ? "compact" : ""}`}>
     <div className={`category-mark category-${item.category.toLowerCase()}`}>{item.category === "Fridge" ? "❄" : item.category === "Pantry" ? "▤" : item.category === "Freezer" ? "◌" : "•"}</div>
-    <div className="item-main" onDoubleClick={onEdit}><div className="item-title-line"><strong>{item.name}</strong>{item.basic && <span className="basic-tag">Basic</span>}</div><span className="item-meta">{item.quantity} {item.unit} · {item.location}</span></div>
+    <div className="item-main" onPointerDown={onPointerDown} onPointerUp={onPointerUp} onPointerLeave={onPointerLeave} onClick={onClick} onDoubleClick={onEdit}>
+      <div className="item-title-line"><strong>{item.name}</strong>{item.basic && <span className="basic-tag">Basic</span>}</div><span className="item-meta">{item.quantity} {item.unit} · {item.location}</span>{hint && <span className="longpress-hint" role="status">{hint}</span>}
+    </div>
     <div className="item-expiry"><StatusPill status={status} /><span>{expiryLabel(item.expiry)}</span><button type="button" className="expiry-edit-button" onClick={(event) => { event.stopPropagation(); onEditExpiry(); }}>{item.expiry ? "Edit date" : "Add date"}</button></div>
-    
+    {!compact && <div className="row-actions"><IconButton label={`Edit ${item.name}`} onClick={onEdit}>✎</IconButton><IconButton label={`Mark ${item.name} finished`} onClick={onFinish}>✓</IconButton><IconButton label={`Delete ${item.name}`} onClick={onDelete}>×</IconButton></div>}
   </div>;
 }
 
@@ -497,6 +497,7 @@ function RecipesView({ mode, setMode, tagFilter, setTagFilter, typeFilter, setTy
     </div>
     {(suggestionStatus || suggestedRecipe) && <section className="online-suggestion-panel">
       <div><span>{suggestionSource === "web" ? "Real online recipe" : suggestionSource === "ai" ? "AI idea fallback" : suggestionSource === "local" ? "Saved recipe match" : "Online recipe search"}</span><strong>{suggestedRecipe?.name ?? suggestionStatus}</strong>{suggestedRecipe && <p>{recipeDescription(suggestedRecipe, suggestionSource)}</p>}{suggestionStatus && suggestedRecipe && <small>{suggestionStatus}</small>}{suggestedRecipe?.sourceUrl && <small>Source: {sourceHostname(suggestedRecipe.sourceUrl)}</small>}</div>
+      {!suggestedRecipe && <div className="online-suggestion-actions"><button className="secondary-button" onClick={onSuggest} disabled={isSuggesting}>{isSuggesting ? "Searching..." : "Try again"}</button></div>}
       {suggestedRecipe && <div className="online-suggestion-actions"><button className="secondary-button" onClick={onOpenSuggestion}>View recipe</button>{(suggestionSource === "web" || suggestionSource === "ai") && <button className="text-button" onClick={onSaveSuggestion}>Save recipe</button>}</div>}
     </section>}
     <div className="recipe-controls"><div className="recipe-filter-row">{([["use-soon", "Cook with expiring items"], ["use-what-i-have", "Use what I have"], ["minimal-shopping", "Minimal shopping"]] as [RecipeMode, string][]).map(([id, label]) => <button key={id} className={mode === id ? "active" : ""} onClick={() => setMode(id)}>{label}</button>)}</div><div className="recipe-filter-row"><button className={typeFilter === "All" ? "active" : ""} onClick={() => setTypeFilter("All")}>All</button><button className={typeFilter === "savory" ? "active" : ""} onClick={() => setTypeFilter("savory")}>Savory</button><button className={typeFilter === "sweet" ? "active" : ""} onClick={() => setTypeFilter("sweet")}>Sweet</button></div></div>
