@@ -47,4 +47,9 @@ yarn-error.log*
 # local Cline/Cursor scratch space
 .claude/
 
+# ad-hoc shell log files created by tooling
+*.log
+s.log
+out.txt
+
 .env*
