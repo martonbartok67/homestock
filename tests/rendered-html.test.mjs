@@ -168,11 +168,14 @@ test("push notifications are wired end to end", async () => {
   assert.match(page, /onClick=\{\(\) => void setPreference\("notifySevenDays"/);
   assert.match(page, /onClick=\{\(\) => void disableNotifications\(\)\}/);
 
-  // --- VAPID + CRON env vars are documented
+  // --- VAPID + CRON env vars are documented. The VAPID public key is
+  // served to the browser at runtime via /api/push/vapid-public-key, so
+  // the matching NEXT_PUBLIC_VAPID_PUBLIC_KEY is no longer required.
   assert.match(envExample, /VAPID_PUBLIC_KEY=/);
   assert.match(envExample, /VAPID_PRIVATE_KEY=/);
   assert.match(envExample, /VAPID_EMAIL=/);
-  assert.match(envExample, /NEXT_PUBLIC_VAPID_PUBLIC_KEY=/);
+  assert.doesNotMatch(envExample, /NEXT_PUBLIC_VAPID_PUBLIC_KEY=/);
+  assert.match(envExample, /vapid-public-key/);
   assert.match(envExample, /CRON_SECRET=/);
 
   // --- Vercel cron is wired at 0 8 * * *
@@ -262,4 +265,24 @@ test("push notification hardening (unique endpoint, partial update, per-device u
   // belonging to the household.
   assert.match(cronRoute, /removePushSubscriptionByEndpoint\(household\.endpoint\)/);
   assert.doesNotMatch(cronRoute, /removePushSubscription\(household\.householdId\)/);
+});
+
+test("VAPID public key is served via API, not baked into the client bundle", async () => {
+  const [page, vapidRoute] = await Promise.all([
+    readFile(new URL("../app/home-stock-app.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/push/vapid-public-key/route.ts", import.meta.url), "utf8"),
+  ]);
+
+  // --- The new server route exists and reads VAPID_PUBLIC_KEY (server-only,
+  // not NEXT_PUBLIC_*), and returns 503 when unset.
+  assert.match(vapidRoute, /process\.env\.VAPID_PUBLIC_KEY/);
+  assert.doesNotMatch(vapidRoute, /NEXT_PUBLIC_VAPID_PUBLIC_KEY/);
+  assert.match(vapidRoute, /status: 503/);
+  assert.match(vapidRoute, /requireHousehold/);
+
+  // --- The client fetches the key from the new route instead of reading
+  // process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY. The old env-var read is gone.
+  assert.match(page, /\/api\/push\/vapid-public-key/);
+  assert.match(page, /householdFetch\("\/api\/push\/vapid-public-key"\)/);
+  assert.doesNotMatch(page, /process\.env\.NEXT_PUBLIC_VAPID_PUBLIC_KEY/);
 });

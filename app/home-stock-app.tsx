@@ -694,7 +694,21 @@ function SettingsPanelBody({ support, permission, setPermission, prefs, setPrefs
         notify("Browser permission was not granted.");
         return;
       }
-      const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "";
+      // Fetch the VAPID public key from a server route instead of
+      // reading NEXT_PUBLIC_VAPID_PUBLIC_KEY. The env var approach
+      // bakes the value into the JS bundle at build time, which means
+      // a missing var on a fresh deploy silently disables push. The
+      // route reads the server-only VAPID_PUBLIC_KEY and returns 503
+      // if it is unset, so the failure is visible here.
+      const keyResponse = await householdFetch("/api/push/vapid-public-key");
+      if (!keyResponse.ok) {
+        if (keyResponse.status === 503) {
+          throw new Error("Push notifications are not configured for this deployment.");
+        }
+        const body = await keyResponse.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error || "Could not load VAPID public key.");
+      }
+      const { publicKey: vapidKey } = (await keyResponse.json()) as { publicKey?: string };
       if (!vapidKey) {
         throw new Error("Push notifications are not configured for this deployment.");
       }
