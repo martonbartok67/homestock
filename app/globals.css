@@ -597,6 +597,9 @@ body { background: var(--paper); color: var(--ink); }
 .settings-button { border-color: var(--line); background: var(--mint); color: var(--sage-deep); }
 .settings-button.active, .settings-button:hover { background: #d5ecd8; }
 .setting-status { background: var(--mint); color: var(--sage-deep) !important; }
+.toggle.off { background: #d8e0d9; cursor: not-allowed; opacity: 0.6; }
+.toggle.off i { margin-left: 0; }
+.toggle:disabled { cursor: not-allowed; opacity: 0.6; }
 
 @media (max-width: 760px) {
   .mobile-nav { background: rgba(248,250,248,0.95); border-top-color: var(--line); backdrop-filter: blur(10px); }

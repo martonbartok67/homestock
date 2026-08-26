@@ -4,7 +4,26 @@ export const households = sqliteTable("households", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   createdAt: text("created_at").notNull(),
+  notifyOneDay: integer("notify_one_day", { mode: "boolean" }).notNull().default(false),
+  notifyThreeDays: integer("notify_three_days", { mode: "boolean" }).notNull().default(false),
+  notifySevenDays: integer("notify_seven_days", { mode: "boolean" }).notNull().default(false),
 });
+
+export const pushSubscriptions = sqliteTable(
+  "push_subscriptions",
+  {
+    id: text("id").primaryKey(),
+    householdId: text("household_id").notNull(),
+    endpoint: text("endpoint").notNull(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => ({
+    householdIndex: index("push_subscriptions_household_idx").on(table.householdId),
+    endpointIndex: uniqueIndex("push_subscriptions_endpoint_unique").on(table.endpoint),
+  }),
+);
 
 export const householdMembers = sqliteTable(
   "household_members",

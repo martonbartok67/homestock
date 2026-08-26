@@ -417,7 +417,7 @@ export default function Home() {
     if (view === "expiring") return <ExpiringView items={expiring} onFinish={finishItem} onDelete={deleteItem} onAdd={() => setShowAdd(true)} onEdit={setEditingInventoryItem} onEditExpiry={setEditingExpiryItem} />;
     if (view === "shopping") return <ShoppingView shopping={shopping} onToggle={toggleShopping} onRemove={removeShopping} onAdd={(name) => addShopping(name)} />;
     if (view === "recipes") return <RecipesView mode={recipeMode} setMode={setRecipeMode} tagFilter={recipeTagFilter} setTagFilter={setRecipeTagFilter} typeFilter={recipeTypeFilter} setTypeFilter={setRecipeTypeFilter} recipes={recipeList} inventory={inventory} suggestedRecipe={suggestedRecipe} suggestionSource={suggestionSource} suggestionStatus={suggestionStatus} isSuggesting={isSuggestingRecipe} onSuggest={suggestOnlineRecipe} onOpen={setActiveRecipe} onOpenSuggestion={() => suggestedRecipe && setActiveRecipe(suggestedRecipe)} onSaveSuggestion={saveSuggestedRecipe} onEdit={setEditingRecipe} onDelete={deleteRecipe} onAddMissing={addMissing} onAdd={() => setShowRecipeForm(true)} />;
-    if (view === "settings") return <SettingsView householdName={household?.name ?? "Your household"} memberCount={household?.memberCount} inventory={inventory} shopping={shopping} recipes={recipeList} />;
+    if (view === "settings") return <SettingsView householdName={household?.name ?? "Your household"} memberCount={household?.memberCount} inventory={inventory} shopping={shopping} recipes={recipeList} householdFetch={householdFetch} notify={notify} />;
     return <Dashboard inventory={inventory} expiring={expiring} basics={basics} shopping={shopping} recipes={recipeList} greeting={greeting} onAdd={() => setShowAdd(true)} onView={setView} onFinish={finishItem} onDelete={deleteItem} onRecipe={() => setView("recipes")} onAddShopping={(item) => addShopping(item.name, item.category, "inventory")} />;
   };
 
@@ -617,7 +617,213 @@ function RecipeFormModal({ initialRecipe, onClose, onSubmit }: { initialRecipe?:
   return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !isSaving) onClose(); }}><form className="modal-card recipe-form-modal" role="dialog" aria-modal="true" aria-labelledby="recipe-form-title" onSubmit={(event) => { event.preventDefault(); if (!isSaving) void submitRecipe(); }} noValidate><div className="modal-header"><div><div className="eyebrow">{initialRecipe ? "Edit recipe" : "New recipe"}</div><h2 id="recipe-form-title">{initialRecipe ? "Change recipe" : "Add recipe"}</h2></div><IconButton label="Close" onClick={isSaving ? undefined : onClose}>×</IconButton></div><p className="form-hint">Use a URL or type it yourself. English is the main display language; magyar text is optional.</p><div className="recipe-import-box"><label>Recipe URL<input value={importUrl} onChange={(event) => setImportUrl(event.target.value)} placeholder="https://..." /></label><button type="button" className="secondary-button" onClick={importRecipe} disabled={isImporting || isSaving}>{isImporting ? "Importing..." : initialRecipe ? "Replace from URL" : "Import"}</button>{importStatus && <span>{importStatus}</span>}</div>{formError && <p className="form-error">{formError}</p>}<div className="recipe-language-grid"><section><div className="language-label">English</div><label>Name<input value={nameEn} onChange={(event) => setNameEn(event.target.value)} placeholder="e.g. Vegetable pasta" /></label><label>Description<textarea value={descriptionEn} onChange={(event) => setDescriptionEn(event.target.value)} placeholder="A short description" rows={3} /></label><label>Ingredients<textarea value={ingredientsEn} onChange={(event) => setIngredientsEn(event.target.value)} placeholder={"One per line\nPasta\nTomatoes"} rows={5} /></label><label>Steps<textarea value={stepsEn} onChange={(event) => setStepsEn(event.target.value)} placeholder={"One per line\nBoil the pasta\nAdd the sauce"} rows={5} /></label><label>Tags<input value={tagsEn} onChange={(event) => setTagsEn(event.target.value)} placeholder="Vegetarian, Quick" /></label></section><section><div className="language-label">Magyar <span>optional</span></div><label>Név<input value={nameHu} onChange={(event) => setNameHu(event.target.value)} placeholder="pl. Zöldséges tészta" /></label><label>Leírás<textarea value={descriptionHu} onChange={(event) => setDescriptionHu(event.target.value)} placeholder="Rövid leírás" rows={3} /></label><label>Hozzávalók<textarea value={ingredientsHu} onChange={(event) => setIngredientsHu(event.target.value)} placeholder={"Soronként egyet\nTészta\nParadicsom"} rows={5} /></label><label>Elkészítés<textarea value={stepsHu} onChange={(event) => setStepsHu(event.target.value)} placeholder={"Soronként egyet\nFőzd meg a tésztát\nAdd hozzá a szószt"} rows={5} /></label><label>Címkék<input value={tagsHu} onChange={(event) => setTagsHu(event.target.value)} placeholder="Vegetáriánus, Gyors" /></label></section></div><div className="recipe-shared-fields"><label>Time<input value={time} onChange={(event) => setTime(event.target.value)} placeholder="30 min" /></label><label>Difficulty<select value={difficulty} onChange={(event) => setDifficulty(event.target.value as Recipe["difficulty"])}><option>Easy</option><option>Medium</option></select></label></div><div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose} disabled={isSaving}>Cancel</button><button type="submit" className="primary-button" disabled={isSaving}>{isSaving ? "Saving..." : initialRecipe ? "Save changes" : "Save recipe"}</button></div></form></div>;
 }
 
-function SettingsView({ householdName, memberCount, inventory, shopping, recipes }: { householdName: string; memberCount?: number; inventory: InventoryItem[]; shopping: ShoppingListItem[]; recipes: Recipe[] }) { return <div className="list-view settings-view"><div className="page-intro"><div><div className="eyebrow">Make it yours</div><h1>Settings</h1><p>Your household and account are always available here.</p></div></div><div className="settings-grid"><section className="panel settings-panel"><div className="eyebrow">Household</div><h2>{householdName}</h2><p>Inventory, shopping and recipe changes sync only with members of this household.</p><div className="account-control"><div><strong>Private household</strong><span>{memberCount ? `${memberCount} member${memberCount === 1 ? "" : "s"}` : "Email access list"}</span></div><span className="setting-status">Turso protected</span></div><div className="setting-row"><div><strong>Expiry reminders</strong><span>Urgent items appear on the overview automatically</span></div><span className="setting-status">Always on</span></div><div className="setting-row"><div><strong>Restock basics</strong><span>Finished basic items return to the shopping list</span></div><span className="setting-status">Always on</span></div></section><section className="panel settings-panel"><div className="eyebrow">Account &amp; data</div><h2>Your HomeStock access</h2><div className="account-control"><div><strong>Personal login</strong><span>Manage your email or sign out</span></div><UserButton /></div><div className="data-stat"><span>Inventory items</span><strong>{inventory.length}</strong></div><div className="data-stat"><span>Shopping items</span><strong>{shopping.length}</strong></div><div className="data-stat"><span>Saved recipes</span><strong>{recipes.length}</strong></div></section></div></div>; }
+type NotificationPrefsState = {
+  notifyOneDay: boolean;
+  notifyThreeDays: boolean;
+  notifySevenDays: boolean;
+  hasSubscription: boolean;
+};
+
+type PushSupport = {
+  supported: boolean;
+  reason: string;
+  isIOS: boolean;
+  isStandalone: boolean;
+};
+
+function detectPushSupport(): PushSupport {
+  if (typeof window === "undefined") {
+    return { supported: false, reason: "Notifications are not available on the server.", isIOS: false, isStandalone: false };
+  }
+  const isIOS = /iPad|iPhone|iPod/.test(window.navigator.userAgent) && !("MSStream" in window);
+  const isStandalone =
+    window.matchMedia?.("(display-mode: standalone)").matches ||
+    (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+  if (typeof window.Notification === "undefined") {
+    return { supported: false, reason: "Your browser does not support notifications.", isIOS, isStandalone };
+  }
+  if (typeof window.navigator.serviceWorker === "undefined") {
+    return { supported: false, reason: "Your browser does not support background services.", isIOS, isStandalone };
+  }
+  if (isIOS && !isStandalone) {
+    return { supported: false, reason: "Add HomeStock to your Home Screen to enable push notifications.", isIOS, isStandalone };
+  }
+  return { supported: true, reason: "", isIOS, isStandalone };
+}
+
+type SettingsPanelBodyProps = {
+  support: PushSupport;
+  permission: NotificationPermission;
+  setPermission: (value: NotificationPermission) => void;
+  prefs: NotificationPrefsState;
+  setPrefs: React.Dispatch<React.SetStateAction<NotificationPrefsState>>;
+  isLoadingPrefs: boolean;
+  isEnabling: boolean;
+  setIsEnabling: (value: boolean) => void;
+  householdFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+  notify: (message: string) => void;
+};
+
+function SettingsPanelBody({ support, permission, setPermission, prefs, setPrefs, isLoadingPrefs, isEnabling, setIsEnabling, householdFetch, notify }: SettingsPanelBodyProps) {
+  const setPreference = async (key: "notifyOneDay" | "notifyThreeDays" | "notifySevenDays", value: boolean) => {
+    const previous = prefs[key];
+    setPrefs((current) => ({ ...current, [key]: value }));
+    try {
+      const response = await householdFetch("/api/push/preferences", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [key]: value }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error || "Could not save your preference.");
+      }
+    } catch (error) {
+      setPrefs((current) => ({ ...current, [key]: previous }));
+      notify(error instanceof Error ? error.message : "Could not save your preference.");
+    }
+  };
+
+  const enableNotifications = async () => {
+    if (!support.supported || isEnabling) return;
+    setIsEnabling(true);
+    try {
+      const next = await window.Notification.requestPermission();
+      setPermission(next);
+      if (next !== "granted") {
+        notify("Browser permission was not granted.");
+        return;
+      }
+      const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "";
+      if (!vapidKey) {
+        throw new Error("Push notifications are not configured for this deployment.");
+      }
+      const registration = await window.navigator.serviceWorker.register("/sw.js");
+      const ready = registration.active ? registration : await window.navigator.serviceWorker.ready;
+      const subscription = await ready.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: vapidKey,
+      });
+      const json = subscription.toJSON();
+      const endpoint = json.endpoint;
+      const p256dh = json.keys?.p256dh;
+      const auth = json.keys?.auth;
+      if (!endpoint || !p256dh || !auth) {
+        throw new Error("Browser did not return a valid push subscription.");
+      }
+      const response = await householdFetch("/api/push/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endpoint, p256dh, auth }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error || "Could not save your subscription.");
+      }
+      setPrefs((current) => ({ ...current, hasSubscription: true }));
+      notify("Expiry reminders are on. We will let you know when food is about to go off.");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Could not enable notifications.");
+    } finally {
+      setIsEnabling(false);
+    }
+  };
+
+  const disableNotifications = async () => {
+    if (isEnabling) return;
+    setIsEnabling(true);
+    let endpoint: string | undefined;
+    try {
+      const registration = await window.navigator.serviceWorker.getRegistration();
+      const subscription = await registration?.pushManager.getSubscription();
+      // Capture the endpoint *before* unsubscribing locally — once the local
+      // subscription is gone, the browser no longer exposes it.
+      endpoint = subscription?.endpoint;
+      await subscription?.unsubscribe();
+    } catch {
+      // Server-side cleanup is what matters — ignore local unsubscribe errors.
+    }
+    try {
+      const response = await householdFetch("/api/push/unsubscribe", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        // Send the endpoint so the server can remove only this device,
+        // not every device that belongs to the household.
+        body: JSON.stringify({ endpoint }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error || "Could not turn off notifications.");
+      }
+      setPrefs((current) => ({ ...current, hasSubscription: false }));
+      notify("Notifications turned off.");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Could not turn off notifications.");
+    } finally {
+      setIsEnabling(false);
+    }
+  };
+
+  return <section className="panel settings-panel"><div className="eyebrow">Notifications</div><h2>Expiry reminders</h2><p>Get a heads-up before food goes off. We only use this to send expiry reminders for your household.</p>
+    {!support.supported ? (
+      <div className="setting-row"><div><strong>Browser support</strong><span>{support.reason}</span></div></div>
+    ) : permission === "denied" ? (
+      <div className="setting-row"><div><strong>Browser permission</strong><span>Notifications are blocked in this browser. Allow them in the address bar, then come back.</span></div></div>
+    ) : !prefs.hasSubscription ? (
+      <div className="setting-row"><div><strong>Reminders</strong><span>Allow HomeStock to send you expiry reminders for the items in your household.</span></div><button type="button" className="primary-button" onClick={() => void enableNotifications()} disabled={isEnabling}>{isEnabling ? "Enabling..." : "Enable notifications"}</button></div>
+    ) : (
+      <div className="setting-row"><div><strong>Reminders</strong><span>You will get a push notification when items in your household are about to expire.</span></div><button type="button" className="secondary-button" onClick={() => void disableNotifications()} disabled={isEnabling}>{isEnabling ? "Working..." : "Turn off"}</button></div>
+    )}
+    <div className="setting-row"><div><strong>1 day before expiry</strong><span>Final reminder for food that is about to go off tomorrow.</span></div><button type="button" aria-pressed={prefs.notifyOneDay} className={`toggle${prefs.notifyOneDay ? "" : " off"}`} onClick={() => void setPreference("notifyOneDay", !prefs.notifyOneDay)} disabled={!prefs.hasSubscription || isLoadingPrefs}><i /></button></div>
+    <div className="setting-row"><div><strong>3 days before expiry</strong><span>Plan a meal around food that is closing in.</span></div><button type="button" aria-pressed={prefs.notifyThreeDays} className={`toggle${prefs.notifyThreeDays ? "" : " off"}`} onClick={() => void setPreference("notifyThreeDays", !prefs.notifyThreeDays)} disabled={!prefs.hasSubscription || isLoadingPrefs}><i /></button></div>
+    <div className="setting-row"><div><strong>7 days before expiry</strong><span>Get an early nudge so you have time to use it.</span></div><button type="button" aria-pressed={prefs.notifySevenDays} className={`toggle${prefs.notifySevenDays ? "" : " off"}`} onClick={() => void setPreference("notifySevenDays", !prefs.notifySevenDays)} disabled={!prefs.hasSubscription || isLoadingPrefs}><i /></button></div>
+  </section>;
+}
+
+function NotificationsPanel({ householdFetch, notify }: { householdFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>; notify: (message: string) => void }) {
+  const [support] = useState<PushSupport>(() => detectPushSupport());
+  const [permission, setPermission] = useState<NotificationPermission>(() => (typeof window !== "undefined" && typeof window.Notification !== "undefined" ? window.Notification.permission : "denied"));
+  const [prefs, setPrefs] = useState<NotificationPrefsState>({ notifyOneDay: false, notifyThreeDays: false, notifySevenDays: false, hasSubscription: false });
+  const [isLoadingPrefs, setIsLoadingPrefs] = useState(true);
+  const [isEnabling, setIsEnabling] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const response = await householdFetch("/api/home-stock");
+        if (!active || !response.ok) return;
+        const body = await response.json().catch(() => ({})) as { household?: { notifyOneDay?: boolean; notifyThreeDays?: boolean; notifySevenDays?: boolean } };
+        if (body.household) {
+          setPrefs((current) => ({
+            notifyOneDay: body.household?.notifyOneDay ?? current.notifyOneDay,
+            notifyThreeDays: body.household?.notifyThreeDays ?? current.notifyThreeDays,
+            notifySevenDays: body.household?.notifySevenDays ?? current.notifySevenDays,
+            hasSubscription: current.hasSubscription,
+          }));
+        }
+      } catch {
+        // Quietly ignore — toggles will simply show their default state.
+      } finally {
+        if (active) setIsLoadingPrefs(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [householdFetch]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.navigator.serviceWorker === "undefined") return;
+    void window.navigator.serviceWorker.getRegistration().then((registration) => {
+      setPrefs((current) => ({ ...current, hasSubscription: Boolean(registration && registration.active) }));
+    }).catch(() => {
+      setPrefs((current) => ({ ...current, hasSubscription: false }));
+    });
+  }, []);
+
+  return <SettingsPanelBody support={support} permission={permission} setPermission={setPermission} prefs={prefs} setPrefs={setPrefs} isLoadingPrefs={isLoadingPrefs} isEnabling={isEnabling} setIsEnabling={setIsEnabling} householdFetch={householdFetch} notify={notify} />;
+}
+
+function SettingsView({ householdName, memberCount, inventory, shopping, recipes, householdFetch, notify }: { householdName: string; memberCount?: number; inventory: InventoryItem[]; shopping: ShoppingListItem[]; recipes: Recipe[]; householdFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>; notify: (message: string) => void }) { return <div className="list-view settings-view"><div className="page-intro"><div><div className="eyebrow">Make it yours</div><h1>Settings</h1><p>Your household and account are always available here.</p></div></div><div className="settings-grid"><section className="panel settings-panel"><div className="eyebrow">Household</div><h2>{householdName}</h2><p>Inventory, shopping and recipe changes sync only with members of this household.</p><div className="account-control"><div><strong>Private household</strong><span>{memberCount ? `${memberCount} member${memberCount === 1 ? "" : "s"}` : "Email access list"}</span></div><span className="setting-status">Turso protected</span></div><div className="setting-row"><div><strong>Expiry reminders</strong><span>Urgent items appear on the overview automatically</span></div><span className="setting-status">Always on</span></div><div className="setting-row"><div><strong>Restock basics</strong><span>Finished basic items return to the shopping list</span></div><span className="setting-status">Always on</span></div></section><section className="panel settings-panel"><div className="eyebrow">Account &amp; data</div><h2>Your HomeStock access</h2><div className="account-control"><div><strong>Personal login</strong><span>Manage your email or sign out</span></div><UserButton /></div><div className="data-stat"><span>Inventory items</span><strong>{inventory.length}</strong></div><div className="data-stat"><span>Shopping items</span><strong>{shopping.length}</strong></div><div className="data-stat"><span>Saved recipes</span><strong>{recipes.length}</strong></div></section><NotificationsPanel householdFetch={householdFetch} notify={notify} /></div></div>; }
 
 function AddItemModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (item: Omit<InventoryItem, "id">) => Promise<boolean> }) { const [name, setName] = useState(""); const [category, setCategory] = useState<Category>("Fridge"); const [quantity, setQuantity] = useState("1"); const [unit, setUnit] = useState("pieces"); const [expiry, setExpiry] = useState(""); const [location, setLocation] = useState(""); const [barcode, setBarcode] = useState(""); const [isScanning, setIsScanning] = useState(false); const [isLookingUp, setIsLookingUp] = useState(false); const [lookupError, setLookupError] = useState(""); const [basic, setBasic] = useState(false); const [isSaving, setIsSaving] = useState(false); const lookupBarcode = async (value = barcode) => { const code = value.trim(); if (!/^\d{8,14}$/.test(code)) return; setLookupError(""); setIsLookingUp(true); try { const response = await fetch(`/api/food-lookup?barcode=${encodeURIComponent(code)}`); const result = await response.json() as { found?: boolean; name?: string; category?: Category; error?: string }; if (!response.ok) throw new Error(result.error || "Lookup failed."); if (result.found && result.name) { setName(result.name); if (result.category) setCategory(result.category); } else { setLookupError("No product details were found. You can still save the barcode."); } } catch { setLookupError("Product lookup is unavailable. You can still save the barcode."); } finally { setIsLookingUp(false); } }; useCloseOnEscape(onClose, !isSaving); return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !isSaving) onClose(); }}><form className="modal-card add-modal" role="dialog" aria-modal="true" aria-labelledby="add-item-title" onSubmit={async (event) => { event.preventDefault(); if (!name.trim() || isSaving) return; setIsSaving(true); const saved = await onSubmit({ name: name.trim(), category, location: location || "Not set", quantity: Number(quantity) || 1, unit, expiry: expiry || undefined, purchaseDate: todayInputValue(), barcode: barcode || undefined, basic }); setIsSaving(false); if (saved) onClose(); }}><div className="modal-header"><div><div className="eyebrow">New item</div><h2 id="add-item-title">Add to inventory</h2></div><IconButton label="Close" onClick={isSaving ? undefined : onClose}>×</IconButton></div><div className="form-grid"><label className="full">Name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Avocados" required /></label><label>Category<select value={category} onChange={(event) => setCategory(event.target.value as Category)}>{categories.map((option) => <option key={option}>{option}</option>)}</select></label><label>Quantity<input type="number" min="1" step="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label><label>Unit<select value={unit} onChange={(event) => setUnit(event.target.value)}><option>pieces</option><option>packs</option><option>grams</option><option>kg</option><option>liters</option><option>bottles</option></select></label><label>Expiry date<input type="date" value={expiry} onChange={(event) => setExpiry(event.target.value)} /></label><label className="full">Where is it kept?<input value={location} onChange={(event) => setLocation(event.target.value)} placeholder="e.g. Fridge door" /></label></div><div className="barcode-field"><label>Barcode<input inputMode="numeric" pattern="[0-9]*" value={barcode} onChange={(event) => setBarcode(event.target.value.replace(/\D/g, "").slice(0, 14))} placeholder="Optional UPC/EAN" /></label><button type="button" className="secondary-button" onClick={() => setIsScanning(true)} disabled={isSaving}>Scan</button><button type="button" className="secondary-button" onClick={() => void lookupBarcode()} disabled={isSaving || isLookingUp || !/^\d{8,14}$/.test(barcode)}>{isLookingUp ? "Looking up..." : "Look up"}</button></div>{lookupError && <p className="form-hint">{lookupError}</p>}<label className="checkbox-label"><input type="checkbox" checked={basic} onChange={(event) => setBasic(event.target.checked)} /><span>Mark as a basic item <small>Offer to restock this when it&apos;s finished</small></span></label><div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose} disabled={isSaving}>Cancel</button><button type="submit" className="primary-button" disabled={isSaving}>{isSaving ? "Saving..." : "Save item"}</button></div></form>{isScanning && <BarcodeScanner onClose={() => setIsScanning(false)} onDetected={(code) => { setBarcode(code); setIsScanning(false); void lookupBarcode(code); }} />}</div>; }
 

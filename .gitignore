@@ -44,4 +44,7 @@ yarn-error.log*
 # clerk configuration (can include secrets)
 /.clerk/
 
+# local Cline/Cursor scratch space
+.claude/
+
 .env*

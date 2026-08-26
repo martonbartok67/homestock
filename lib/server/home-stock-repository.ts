@@ -1,4 +1,4 @@
-import { and, asc, count, eq } from "drizzle-orm";
+import { and, asc, count, eq, or, sql } from "drizzle-orm";
 import { getDb, getSqlClient } from "../../db";
 import {
   inventoryItems,
@@ -7,6 +7,7 @@ import {
   recipeIngredients,
   recipes as recipeTable,
   shoppingListItems,
+  pushSubscriptions,
 } from "../../db/schema";
 import type {
   InventoryItem,
@@ -22,6 +23,7 @@ const schemaStatements = [
   `CREATE TABLE IF NOT EXISTS recipes (id TEXT PRIMARY KEY NOT NULL, household_id TEXT NOT NULL, name TEXT NOT NULL, name_hu TEXT, description TEXT NOT NULL, description_hu TEXT, source_url TEXT, time TEXT NOT NULL, difficulty TEXT NOT NULL, recipe_type TEXT NOT NULL DEFAULT 'savory', thumb_url TEXT, tags TEXT NOT NULL DEFAULT '[]', tags_hu TEXT NOT NULL DEFAULT '[]', steps TEXT NOT NULL DEFAULT '[]', steps_hu TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS recipe_ingredients (id TEXT PRIMARY KEY NOT NULL, household_id TEXT NOT NULL, recipe_id TEXT NOT NULL, ingredient_name TEXT NOT NULL, ingredient_name_hu TEXT, sort_order INTEGER NOT NULL DEFAULT 0)`,
   `CREATE TABLE IF NOT EXISTS user_preferences (id TEXT PRIMARY KEY NOT NULL, household_id TEXT NOT NULL, workspace_name TEXT NOT NULL DEFAULT 'Household', created_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS push_subscriptions (id TEXT PRIMARY KEY NOT NULL, household_id TEXT NOT NULL, endpoint TEXT NOT NULL, p256dh TEXT NOT NULL, auth TEXT NOT NULL, created_at TEXT NOT NULL)`,
 ];
 
 const householdTables = [
@@ -30,6 +32,7 @@ const householdTables = [
   "recipes",
   "recipe_ingredients",
   "user_preferences",
+  "push_subscriptions",
 ] as const;
 
 const householdIndexStatements = [
@@ -44,6 +47,8 @@ const householdIndexStatements = [
   "CREATE INDEX IF NOT EXISTS recipe_ingredients_household_idx ON recipe_ingredients (household_id)",
   "CREATE INDEX IF NOT EXISTS recipe_ingredients_household_recipe_idx ON recipe_ingredients (household_id, recipe_id)",
   "CREATE INDEX IF NOT EXISTS user_preferences_household_idx ON user_preferences (household_id)",
+  "CREATE INDEX IF NOT EXISTS push_subscriptions_household_idx ON push_subscriptions (household_id)",
+  "CREATE UNIQUE INDEX IF NOT EXISTS push_subscriptions_endpoint_unique ON push_subscriptions (endpoint)",
 ];
 
 let initialization: Promise<void> | undefined;
@@ -125,6 +130,23 @@ async function ensureCurrentColumns() {
   const inventoryColumns = new Set(inventoryInfo.rows.map((row) => String(row.name)));
   if (!inventoryColumns.has("barcode")) {
     statements.push("ALTER TABLE inventory_items ADD COLUMN barcode TEXT");
+  }
+  const householdInfo = await client.execute("PRAGMA table_info(households)");
+  const householdColumns = new Set(householdInfo.rows.map((row) => String(row.name)));
+  if (!householdColumns.has("notify_one_day")) {
+    statements.push(
+      "ALTER TABLE households ADD COLUMN notify_one_day INTEGER NOT NULL DEFAULT 0",
+    );
+  }
+  if (!householdColumns.has("notify_three_days")) {
+    statements.push(
+      "ALTER TABLE households ADD COLUMN notify_three_days INTEGER NOT NULL DEFAULT 0",
+    );
+  }
+  if (!householdColumns.has("notify_seven_days")) {
+    statements.push(
+      "ALTER TABLE households ADD COLUMN notify_seven_days INTEGER NOT NULL DEFAULT 0",
+    );
   }
 
   if (statements.length > 0) await client.batch(statements);
@@ -675,4 +697,250 @@ export async function deleteRecipe(householdId: string, id: string) {
       );
   });
   return getSnapshot(householdId);
+}
+
+export async function savePushSubscription(
+  householdId: string,
+  endpoint: string,
+  p256dh: string,
+  auth: string
+) {
+  assertHouseholdId(householdId);
+  await ensureDatabase();
+  const db = getDb();
+  
+  // Upsert by endpoint: a single device always has the same endpoint URL,
+  // so re-subscribing from the same device refreshes the keys without
+  // creating a duplicate row. The unique index on `endpoint` enforces this.
+  const existing = await db
+    .select({ id: pushSubscriptions.id })
+    .from(pushSubscriptions)
+    .where(eq(pushSubscriptions.endpoint, endpoint))
+    .limit(1);
+
+  if (existing.length > 0) {
+    await db
+      .update(pushSubscriptions)
+      .set({ householdId, p256dh, auth, createdAt: now() })
+      .where(eq(pushSubscriptions.id, existing[0].id));
+  } else {
+    await db.insert(pushSubscriptions).values({
+      id: crypto.randomUUID(),
+      householdId,
+      endpoint,
+      p256dh,
+      auth,
+      createdAt: now(),
+    });
+  }
+  
+  return getSnapshot(householdId);
+}
+
+export async function removePushSubscription(householdId: string) {
+  assertHouseholdId(householdId);
+  await ensureDatabase();
+  const db = getDb();
+  
+  await db
+    .delete(pushSubscriptions)
+    .where(eq(pushSubscriptions.householdId, householdId));
+
+  return getSnapshot(householdId);
+}
+
+export async function removePushSubscriptionByEndpoint(endpoint: string): Promise<void> {
+  await ensureDatabase();
+  await getDb()
+    .delete(pushSubscriptions)
+    .where(eq(pushSubscriptions.endpoint, endpoint));
+}
+
+export async function getPushSubscription(householdId: string) {
+  assertHouseholdId(householdId);
+  await ensureDatabase();
+  const db = getDb();
+
+  const rows = await db
+    .select({
+      endpoint: pushSubscriptions.endpoint,
+      p256dh: pushSubscriptions.p256dh,
+      auth: pushSubscriptions.auth,
+    })
+    .from(pushSubscriptions)
+    .where(eq(pushSubscriptions.householdId, householdId));
+
+  return rows.length > 0 ? rows[0] : null;
+}
+
+export type NotificationPreferences = {
+  notifyOneDay: boolean;
+  notifyThreeDays: boolean;
+  notifySevenDays: boolean;
+  hasSubscription: boolean;
+};
+
+export async function getNotificationPreferences(
+  householdId: string,
+): Promise<NotificationPreferences> {
+  assertHouseholdId(householdId);
+  await ensureDatabase();
+  const db = getDb();
+
+  const [preferenceRows, subscriptionRows] = await Promise.all([
+    db
+      .select({
+        notifyOneDay: households.notifyOneDay,
+        notifyThreeDays: households.notifyThreeDays,
+        notifySevenDays: households.notifySevenDays,
+      })
+      .from(households)
+      .where(eq(households.id, householdId))
+      .limit(1),
+    db
+      .select({ id: pushSubscriptions.id })
+      .from(pushSubscriptions)
+      .where(eq(pushSubscriptions.householdId, householdId))
+      .limit(1),
+  ]);
+
+  const row = preferenceRows[0];
+  return {
+    notifyOneDay: Boolean(row?.notifyOneDay),
+    notifyThreeDays: Boolean(row?.notifyThreeDays),
+    notifySevenDays: Boolean(row?.notifySevenDays),
+    hasSubscription: subscriptionRows.length > 0,
+  };
+}
+
+export async function updateNotificationPreferences(
+  householdId: string,
+  prefs: {
+    notifyOneDay?: boolean;
+    notifyThreeDays?: boolean;
+    notifySevenDays?: boolean;
+  },
+) {
+  assertHouseholdId(householdId);
+  await ensureDatabase();
+  const db = getDb();
+  
+  // Only include fields the caller actually passed — this lets a single
+  // PATCH update one preference without overwriting the others.
+  const patch: { notifyOneDay?: boolean; notifyThreeDays?: boolean; notifySevenDays?: boolean } = {};
+  if (prefs.notifyOneDay !== undefined) patch.notifyOneDay = prefs.notifyOneDay;
+  if (prefs.notifyThreeDays !== undefined) patch.notifyThreeDays = prefs.notifyThreeDays;
+  if (prefs.notifySevenDays !== undefined) patch.notifySevenDays = prefs.notifySevenDays;
+
+  if (Object.keys(patch).length === 0) return getSnapshot(householdId);
+
+  await db.update(households).set(patch).where(eq(households.id, householdId));
+    
+  return getSnapshot(householdId);
+}
+
+export type HouseholdWithSubscription = {
+  householdId: string;
+  householdName: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  notifyOneDay: boolean;
+  notifyThreeDays: boolean;
+  notifySevenDays: boolean;
+};
+
+export async function getHouseholdsWithPushSubscriptions(): Promise<HouseholdWithSubscription[]> {
+  await ensureDatabase();
+  const db = getDb();
+  
+  // Pre-filter in SQL: only return households that actually have at least
+  // one notification preference enabled. The cron route only acts on rows
+  // where notify_one_day OR notify_three_days OR notify_seven_days is true.
+  const rows = await db
+    .select({
+      householdId: pushSubscriptions.householdId,
+      householdName: households.name,
+      endpoint: pushSubscriptions.endpoint,
+      p256dh: pushSubscriptions.p256dh,
+      auth: pushSubscriptions.auth,
+      notifyOneDay: households.notifyOneDay,
+      notifyThreeDays: households.notifyThreeDays,
+      notifySevenDays: households.notifySevenDays,
+    })
+    .from(pushSubscriptions)
+    .innerJoin(households, eq(pushSubscriptions.householdId, households.id))
+    .where(
+      or(
+        eq(households.notifyOneDay, true),
+        eq(households.notifyThreeDays, true),
+        eq(households.notifySevenDays, true),
+      ),
+    );
+
+  return rows.map((row) => ({
+    householdId: row.householdId,
+    householdName: row.householdName,
+    endpoint: row.endpoint,
+    p256dh: row.p256dh,
+    auth: row.auth,
+    notifyOneDay: Boolean(row.notifyOneDay),
+    notifyThreeDays: Boolean(row.notifyThreeDays),
+    notifySevenDays: Boolean(row.notifySevenDays),
+  }));
+}
+
+export type ExpiringItem = {
+  id: string;
+  name: string;
+  expiry: string;
+  daysUntil: number;
+};
+
+export async function getExpiringItems(
+  householdId: string,
+  daysUntil: number
+): Promise<ExpiringItem[]> {
+  assertHouseholdId(householdId);
+  await ensureDatabase();
+  const db = getDb();
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const targetDate = new Date(today);
+  targetDate.setDate(targetDate.getDate() + daysUntil);
+  const targetDateStr = targetDate.toISOString().split("T")[0];
+  const todayStr = today.toISOString().split("T")[0];
+
+  // Filter in SQL: only rows whose expiry falls within [today, today+daysUntil].
+  // This avoids pulling every item in the household and discarding most of them.
+  const rows = await db
+    .select({
+      id: inventoryItems.id,
+      name: inventoryItems.name,
+      expiry: inventoryItems.expiry,
+    })
+    .from(inventoryItems)
+    .where(
+      and(
+        eq(inventoryItems.householdId, householdId),
+        sql`${inventoryItems.expiry} IS NOT NULL`,
+        sql`${inventoryItems.expiry} >= ${todayStr}`,
+        sql`${inventoryItems.expiry} <= ${targetDateStr}`,
+      ),
+    )
+    .orderBy(asc(inventoryItems.expiry));
+
+  return rows
+    .filter((row): row is { id: string; name: string; expiry: string } => row.expiry !== null)
+    .map((row) => {
+      const expiryDate = new Date(`${row.expiry}T00:00:00`);
+      const days = Math.round((expiryDate.getTime() - today.getTime()) / 86_400_000);
+      return {
+        id: row.id,
+        name: row.name,
+        expiry: row.expiry,
+        daysUntil: days,
+      };
+    });
 }

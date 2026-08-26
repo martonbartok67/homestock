@@ -93,3 +93,173 @@ test("HomeStock is wired to the Turso-backed API", async () => {
   assert.match(nextConfig, /X-Content-Type-Options/);
   assert.match(nextConfig, /X-Frame-Options/);
 });
+
+test("push notifications are wired end to end", async () => {
+  const [page, schema, repository, packageJson, subscribeRoute, unsubscribeRoute, preferencesRoute, cronRoute, serviceWorker, envExample, vercelJson, globalsCss] = await Promise.all([
+    readFile(new URL("../app/home-stock-app.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/server/home-stock-repository.ts", import.meta.url), "utf8"),
+    readFile(new URL("../package.json", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/push/subscribe/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/push/unsubscribe/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/push/preferences/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/cron/expiry-reminders/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../public/sw.js", import.meta.url), "utf8"),
+    readFile(new URL("../.env.example", import.meta.url), "utf8"),
+    readFile(new URL("../vercel.json", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  // --- Schema ---------------------------------------------------------
+  assert.match(schema, /pushSubscriptions\s*=\s*sqliteTable\(\s*"push_subscriptions"/);
+  assert.match(schema, /notifyOneDay: integer\("notify_one_day", \{ mode: "boolean" \}\)/);
+  assert.match(schema, /notifyThreeDays: integer\("notify_three_days", \{ mode: "boolean" \}\)/);
+  assert.match(schema, /notifySevenDays: integer\("notify_seven_days", \{ mode: "boolean" \}\)/);
+
+  // --- Repository: schema, migration guard, and the functions routes call
+  assert.match(repository, /CREATE TABLE IF NOT EXISTS push_subscriptions/);
+  assert.match(repository, /ALTER TABLE households ADD COLUMN notify_one_day/);
+  assert.match(repository, /ALTER TABLE households ADD COLUMN notify_three_days/);
+  assert.match(repository, /ALTER TABLE households ADD COLUMN notify_seven_days/);
+  assert.match(repository, /export async function savePushSubscription/);
+  assert.match(repository, /export async function removePushSubscription/);
+  assert.match(repository, /export async function getNotificationPreferences/);
+  assert.match(repository, /export async function updateNotificationPreferences/);
+  assert.match(repository, /export async function getHouseholdsWithPushSubscriptions/);
+  assert.match(repository, /export async function getExpiringItems/);
+
+  // --- API routes use requireHousehold (never trust a browser-supplied id)
+  assert.match(subscribeRoute, /requireHousehold/);
+  assert.match(unsubscribeRoute, /requireHousehold/);
+  assert.match(preferencesRoute, /requireHousehold/);
+  assert.match(subscribeRoute, /savePushSubscription/);
+  assert.match(unsubscribeRoute, /removePushSubscription/);
+  assert.match(preferencesRoute, /updateNotificationPreferences/);
+
+  // --- Cron route is bearer-protected and uses web-push
+  assert.match(cronRoute, /CRON_SECRET/);
+  assert.match(cronRoute, /timingSafeEqual/);
+  assert.doesNotMatch(cronRoute, /searchParams\.get\("cronSecret"\)/);
+  assert.match(cronRoute, /webpush\.sendNotification/);
+
+  // --- Service worker handles push and notificationclick
+  assert.match(serviceWorker, /addEventListener\("push"/);
+  assert.match(serviceWorker, /addEventListener\("notificationclick"/);
+  assert.match(serviceWorker, /clients\.openWindow/);
+
+  // --- Settings UI registers the service worker at /sw.js
+  assert.match(page, /navigator\.serviceWorker\.register\("\/sw\.js"\)/);
+  assert.match(page, /Notification\.requestPermission/);
+  assert.match(page, /\/api\/push\/subscribe/);
+  assert.match(page, /\/api\/push\/unsubscribe/);
+  assert.match(page, /\/api\/push\/preferences/);
+  assert.match(page, /1 day before expiry/);
+  assert.match(page, /3 days before expiry/);
+  assert.match(page, /7 days before expiry/);
+  assert.match(page, /Add HomeStock to your Home Screen to enable push notifications/);
+  assert.match(page, /Enable notifications/);
+  // The new panel uses onClick handlers rather than <form> elements — the
+  // brief is explicit. We assert on the structural shape instead of a string
+  // scan because the file is one giant minified line and a substring search
+  // would also match the unrelated <form> elements in AddItemModal etc.
+  assert.match(page, /onClick=\{\(\) => void enableNotifications\(\)\}/);
+  assert.match(page, /onClick=\{\(\) => void setPreference\("notifyOneDay"/);
+  assert.match(page, /onClick=\{\(\) => void setPreference\("notifyThreeDays"/);
+  assert.match(page, /onClick=\{\(\) => void setPreference\("notifySevenDays"/);
+  assert.match(page, /onClick=\{\(\) => void disableNotifications\(\)\}/);
+
+  // --- VAPID + CRON env vars are documented
+  assert.match(envExample, /VAPID_PUBLIC_KEY=/);
+  assert.match(envExample, /VAPID_PRIVATE_KEY=/);
+  assert.match(envExample, /VAPID_EMAIL=/);
+  assert.match(envExample, /NEXT_PUBLIC_VAPID_PUBLIC_KEY=/);
+  assert.match(envExample, /CRON_SECRET=/);
+
+  // --- Vercel cron is wired at 0 8 * * *
+  assert.match(vercelJson, /"path": "\/api\/cron\/expiry-reminders"/);
+  assert.match(vercelJson, /"schedule": "0 8 \* \* \*"/);
+
+  // --- web-push is a real dependency
+  assert.match(packageJson, /"web-push":/);
+
+  // --- Off-state toggle styling exists so the new toggles look right
+  assert.match(globalsCss, /\.toggle\.off/);
+});
+
+test("push notification hardening (unique endpoint, partial update, per-device unsubscribe)", async () => {
+  const [schema, repository, subscribeRoute, unsubscribeRoute, preferencesRoute, cronRoute, page] = await Promise.all([
+    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/server/home-stock-repository.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/push/subscribe/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/push/unsubscribe/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/push/preferences/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/cron/expiry-reminders/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/home-stock-app.tsx", import.meta.url), "utf8"),
+  ]);
+
+  // --- Unique index on endpoint: re-subscribing the same device cannot
+  // create a duplicate row, and a single household can have many devices.
+  assert.match(schema, /uniqueIndex\([^)]*push_subscriptions_endpoint/);
+
+  // --- savePushSubscription upserts by endpoint (one row per device).
+  assert.match(
+    repository,
+    /savePushSubscription[\s\S]*?eq\(pushSubscriptions\.endpoint, endpoint\)[\s\S]*?existing\.length > 0[\s\S]*?\.update\(pushSubscriptions\)/,
+  );
+
+  // --- getExpiringItems filters in SQL rather than pulling everything and
+  // trimming in JS. The implementation uses `sql\`...\`` template literals
+  // (not Drizzle's gte/lte helpers), so we assert on the structural shape
+  // including the `${...}` template substitutions.
+  assert.match(
+    repository,
+    /export async function getExpiringItems\([\s\S]*?orderBy\(asc\(inventoryItems\.expiry\)\)/,
+  );
+  assert.match(repository, /\$\{inventoryItems\.expiry\} IS NOT NULL/);
+  assert.match(repository, /\$\{inventoryItems\.expiry\} >= \$\{todayStr\}/);
+  assert.match(repository, /\$\{inventoryItems\.expiry\} <= \$\{targetDateStr\}/);
+
+  // --- getHouseholdsWithPushSubscriptions pre-filters in SQL: only
+  // households with at least one preference enabled are returned, so the
+  // cron route can drop its redundant JS filter. Each `eq(...)` is on its
+  // own line, so the regex allows whitespace between the calls.
+  assert.match(
+    repository,
+    /getHouseholdsWithPushSubscriptions[\s\S]*?or\(\s*[\s\S]*?eq\(households\.notifyOneDay, true\)[\s\S]*?eq\(households\.notifyThreeDays, true\)[\s\S]*?eq\(households\.notifySevenDays, true\)/,
+  );
+  // The cron route must NOT filter again in JS — trust the SQL.
+  assert.doesNotMatch(cronRoute, /notifyOneDay \|\| household\.notifyThreeDays \|\| household\.notifySevenDays/);
+
+  // --- updateNotificationPreferences takes a partial object so a single
+  // PATCH can update one field without overwriting the others.
+  assert.match(
+    repository,
+    /updateNotificationPreferences\(\s*householdId: string,\s*prefs: \{[\s\S]*?notifyOneDay\?: boolean[\s\S]*?notifyThreeDays\?: boolean[\s\S]*?notifySevenDays\?: boolean/,
+  );
+  // The PATCH route must NOT merge with current values server-side any more —
+  // the repository does the partial update now.
+  assert.doesNotMatch(preferencesRoute, /getNotificationPreferences/);
+  assert.match(preferencesRoute, /updateNotificationPreferences\(household\.householdId, \{/);
+
+  // --- A dedicated removePushSubscriptionByEndpoint repo function exists.
+  assert.match(repository, /export async function removePushSubscriptionByEndpoint\(endpoint: string\): Promise<void>/);
+
+  // --- The unsubscribe route accepts an endpoint in the body and uses
+  // removePushSubscriptionByEndpoint when one is supplied.
+  assert.match(unsubscribeRoute, /removePushSubscriptionByEndpoint/);
+  assert.match(unsubscribeRoute, /typeof raw\.endpoint === "string"/);
+  // Falls back to removePushSubscription (kill all for household) only if
+  // no endpoint is provided.
+  assert.match(unsubscribeRoute, /removePushSubscription\(household\.householdId\)/);
+
+  // --- The client sends its own endpoint when unsubscribing.
+  assert.match(page, /body: JSON\.stringify\(\{ endpoint \}\)/);
+  // The endpoint is captured from the local subscription before the browser
+  // unsubscribes, otherwise it is gone.
+  assert.match(page, /endpoint = subscription\?\.endpoint/);
+
+  // --- The cron route cleans up ONLY the dead endpoint, not every device
+  // belonging to the household.
+  assert.match(cronRoute, /removePushSubscriptionByEndpoint\(household\.endpoint\)/);
+  assert.doesNotMatch(cronRoute, /removePushSubscription\(household\.householdId\)/);
+});
