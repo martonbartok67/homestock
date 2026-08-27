@@ -286,3 +286,80 @@ test("VAPID public key is served via API, not baked into the client bundle", asy
   assert.match(page, /householdFetch\("\/api\/push\/vapid-public-key"\)/);
   assert.doesNotMatch(page, /process\.env\.NEXT_PUBLIC_VAPID_PUBLIC_KEY/);
 });
+
+test("Mobile inventory row tap-and-hold reveals the action menu", async () => {
+  const [page, css] = await Promise.all([
+    readFile(new URL("../app/home-stock-app.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  // --- Home() owns the tapped-row state. One id at a time, toggled by a
+  // helper that the views call into. Without this, the CSS .tapped selector
+  // is dead code and the mobile menu never appears.
+  assert.match(page, /const \[tappedId, setTappedId\] = useState<string \| null>\(null\)/);
+  assert.match(page, /const tapRow = \(id: string\) => setTappedId\(\(current\) => \(current === id \? null : id\)\);/);
+  assert.match(page, /setTappedId\(null\)/);
+
+  // --- The clear-tapped-on-view-change and clear-tapped-on-outside-click
+  // effects are present so the menu doesn't stick around after navigation
+  // or when the user dismisses it.
+  assert.match(page, /setTappedId\(null\);[\s\S]*?\}, \[view\]\)/);
+  assert.match(page, /target\.closest\("\.inventory-table"\)/);
+
+  // --- The state is threaded into both views and into the dashboard so
+  // every place an ItemRow can render knows which row is currently tapped.
+  assert.match(page, /<InventoryView[\s\S]*?tappedId=\{tappedId\} onTapRow=\{tapRow\} \/>/);
+  assert.match(page, /<ExpiringView[\s\S]*?tappedId=\{tappedId\} onTapRow=\{tapRow\} \/>/);
+  assert.match(page, /<Dashboard[\s\S]*?tappedId=\{tappedId\} onTapRow=\{tapRow\} \/>/);
+
+  // --- InventoryView and ExpiringView both pass `tapped` and `onTap` down
+  // to each ItemRow they render, derived from the tappedId prop.
+  assert.match(page, /function InventoryView\(\{ inventory, query, setQuery, categoryFilter, setCategoryFilter, onAdd, onFinish, onDelete, onEdit, onEditExpiry, tappedId, onTapRow \}/);
+  assert.match(page, /function ExpiringView\(\{ items, onFinish, onDelete, onAdd, onEdit, onEditExpiry, tappedId, onTapRow \}/);
+  assert.match(page, /inventory\.map\(\(item\) => <ItemRow[\s\S]*?tapped=\{tappedId === item\.id\} onTap=\{\(\) => onTapRow\(item\.id\)\}/);
+  assert.match(page, /items\.map\(\(item\) => <ItemRow[\s\S]*?tapped=\{tappedId === item\.id\} onTap=\{\(\) => onTapRow\(item\.id\)\}/);
+
+  // --- ItemRow accepts the new props and applies the `tapped` class so
+  // the CSS override can show .row-actions.
+  assert.match(page, /function ItemRow\(\{ item, onFinish, onDelete, onEdit = \(\) => \{\}, onEditExpiry, compact = false, tapped = false, onTap \}/);
+  assert.match(page, /\$\{tapped \? " tapped" : ""\}/);
+
+  // --- The row's onClick is wired to the long-press hook's click handler
+  // (which no-ops for short taps) — NOT directly to onTap — so a quick
+  // tap on mobile does not flip the menu open. The long-press itself is
+  // what fires onTap.
+  assert.match(page, /useLongPress\(\(\) => onTap\?\.\(\), 500\)/);
+  assert.match(page, /<div className=\{rowClassName\}[\s\S]*?onClick=\{onClick\}[\s\S]*?onDoubleClick=\{onEdit\}>/);
+
+  // --- The row-actions wrapper stops click propagation so tapping a
+  // button inside the menu does not bubble up to the row and immediately
+  // close the menu before the button's onClick fires.
+  assert.match(page, /<div className="row-actions" onClick=\{\(event\) => event\.stopPropagation\(\)\}>/);
+
+  // --- The mobile row-actions menu still has a delete button and a
+  // mark-finished (used) button. The brief asked us to add a delete/used
+  // button — they already exist; we just had to wire the menu to be
+  // reachable on mobile.
+  assert.match(page, /IconButton label=\{`Mark \$\{item\.name\} finished`\} onClick=\{onFinish\}>✓<\/IconButton>/);
+  assert.match(page, /IconButton label=\{`Delete \$\{item\.name\}`\} onClick=\{onDelete\}>×<\/IconButton>/);
+
+  // --- Destructive actions clear the tapped state so the menu closes
+  // before the optimistic update re-renders the row.
+  assert.match(page, /if \(await apiAction\("finishInventory", \{ id: item\.id \}\)\) \{[\s\S]*?setTappedId\(null\)/);
+  assert.match(page, /const deleteItem = async \(id: string\) => \{[\s\S]*?setTappedId\(null\)[\s\S]*?await apiAction\("deleteInventory"/);
+
+  // --- The long-press hook no longer has a tooltip / onClick that fires
+  // on short taps. That earlier behaviour fought with the row's onClick
+  // and made the mobile delete path unreachable.
+  assert.doesNotMatch(page, /Press and hold to edit/);
+  assert.doesNotMatch(page, /longpress-hint/);
+
+  // --- CSS: exactly one mobile media query hides the menu, and exactly
+  // one shows it again when the row has the .tapped class. The user's
+  // brief was explicit that duplicate / conflicting rules of this kind
+  // are why the buttons never appeared on mobile.
+  const mobileHides = css.match(/\.inventory-table \.item-row \.row-actions \{\s*display:\s*none;?\s*\}/g) ?? [];
+  const mobileShows = css.match(/\.inventory-table \.item-row\.tapped \.row-actions \{\s*display:\s*flex;?\s*\}/g) ?? [];
+  assert.equal(mobileHides.length, 1, "Expected exactly one mobile rule hiding .row-actions inside .inventory-table");
+  assert.equal(mobileShows.length, 1, "Expected exactly one mobile rule showing .row-actions when the row is .tapped");
+});

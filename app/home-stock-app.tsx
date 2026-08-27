@@ -133,36 +133,62 @@ function StatusPill({ status }: { status: ReturnType<typeof getExpiryStatus> }) 
 }
 
 
-// Long-press hook — shows tooltip on short tap, fires action on hold (500ms)
-function useLongPress(onLongPress: () => void, tooltip: string, ms = 500) {
+// Long-press hook — starts a timer on pointer-down and only fires the
+// callback if the press is held for the full duration. Returns pointer
+// event handlers plus a `wasLongPress` flag plus a `onClick` handler that
+// no-ops for short clicks (so a quick tap on a touch screen doesn't open
+// the menu by accident via the synthetic click that follows pointer-up).
+function useLongPress(onLongPress: () => void, ms = 500) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [hint, setHint] = useState("");
+  const longPressed = useRef(false);
+  const downAt = useRef<number | null>(null);
   const start = () => {
-    timer.current = setTimeout(() => { setHint(""); onLongPress(); }, ms);
+    if (timer.current) clearTimeout(timer.current);
+    longPressed.current = false;
+    downAt.current = Date.now();
+    timer.current = setTimeout(() => {
+      timer.current = null;
+      longPressed.current = true;
+      onLongPress();
+    }, ms);
   };
   const cancel = () => {
     if (timer.current) { clearTimeout(timer.current); timer.current = null; }
+    downAt.current = null;
   };
-  const tap = () => { cancel(); setHint(tooltip); setTimeout(() => setHint(""), 2000); };
+  const handleClick = () => {
+    // Suppress the synthetic click that follows a quick pointer-up on
+    // touch devices — we only want the long-press behaviour to trigger.
+    if (!longPressed.current) return;
+    longPressed.current = false;
+  };
   return {
     onPointerDown: start,
     onPointerUp: cancel,
     onPointerLeave: cancel,
-    onClick: tap,
-    hint,
+    onPointerCancel: cancel,
+    onClick: handleClick,
   };
 }
 
-function ItemRow({ item, onFinish, onDelete, onEdit = () => {}, onEditExpiry, compact = false }: { item: InventoryItem; onFinish: () => void; onDelete: () => void; onEdit?: () => void; onEditExpiry: () => void; compact?: boolean }) {
+function ItemRow({ item, onFinish, onDelete, onEdit = () => {}, onEditExpiry, compact = false, tapped = false, onTap }: { item: InventoryItem; onFinish: () => void; onDelete: () => void; onEdit?: () => void; onEditExpiry: () => void; compact?: boolean; tapped?: boolean; onTap?: () => void }) {
   const status = getExpiryStatus(item.expiry);
-  const { onPointerDown, onPointerUp, onPointerLeave, onClick, hint } = useLongPress(onEdit, "Press and hold to edit", 550);
-  return <div className={`item-row ${status} ${compact ? "compact" : ""}`}>
+  // Long-press anywhere on the row reveals the action menu (sets the
+  // "tapped" class which the CSS uses to show .row-actions on mobile).
+  // The hook's onClick swallows the synthetic click that follows a quick
+  // pointer-up on touch screens so a brief tap does nothing — only a real
+  // hold opens the menu. A desktop hover is unaffected because the CSS
+  // already reveals row-actions via :hover, not via the tapped class.
+  const longPressHandlers = useLongPress(() => onTap?.(), 500);
+  const { onPointerDown, onPointerUp, onPointerLeave, onPointerCancel, onClick } = longPressHandlers;
+  const rowClassName = `item-row ${status}${compact ? " compact" : ""}${tapped ? " tapped" : ""}`;
+  return <div className={rowClassName} onPointerDown={onPointerDown} onPointerUp={onPointerUp} onPointerLeave={onPointerLeave} onPointerCancel={onPointerCancel} onClick={onClick} onDoubleClick={onEdit}>
     <div className={`category-mark category-${item.category.toLowerCase()}`}>{item.category === "Fridge" ? "❄" : item.category === "Pantry" ? "▤" : item.category === "Freezer" ? "◌" : "•"}</div>
-    <div className="item-main" onPointerDown={onPointerDown} onPointerUp={onPointerUp} onPointerLeave={onPointerLeave} onClick={onClick} onDoubleClick={onEdit}>
-      <div className="item-title-line"><strong>{item.name}</strong>{item.basic && <span className="basic-tag">Basic</span>}</div><span className="item-meta">{item.quantity} {item.unit} · {item.location}</span>{hint && <span className="longpress-hint" role="status">{hint}</span>}
+    <div className="item-main">
+      <div className="item-title-line"><strong>{item.name}</strong>{item.basic && <span className="basic-tag">Basic</span>}</div><span className="item-meta">{item.quantity} {item.unit} · {item.location}</span>
     </div>
     <div className="item-expiry"><StatusPill status={status} /><span>{expiryLabel(item.expiry)}</span><button type="button" className="expiry-edit-button" onClick={(event) => { event.stopPropagation(); onEditExpiry(); }}>{item.expiry ? "Edit date" : "Add date"}</button></div>
-    {!compact && <div className="row-actions"><IconButton label={`Edit ${item.name}`} onClick={onEdit}>✎</IconButton><IconButton label={`Mark ${item.name} finished`} onClick={onFinish}>✓</IconButton><IconButton label={`Delete ${item.name}`} onClick={onDelete}>×</IconButton></div>}
+    {!compact && <div className="row-actions" onClick={(event) => event.stopPropagation()}><IconButton label={`Edit ${item.name}`} onClick={onEdit}>✎</IconButton><IconButton label={`Mark ${item.name} finished`} onClick={onFinish}>✓</IconButton><IconButton label={`Delete ${item.name}`} onClick={onDelete}>×</IconButton></div>}
   </div>;
 }
 
@@ -205,6 +231,11 @@ export default function Home() {
   const [activeRecipe, setActiveRecipe] = useState<Recipe | null>(null);
   const [toast, setToast] = useState("");
   const [recipeList, setRecipeList] = useState<Recipe[]>([]);
+  // Mobile: the id of the row whose .row-actions menu is currently revealed
+  // by a long-press tap. Only one row can be "tapped" at a time, matching
+  // the iOS / Android list-context-menu pattern. Cleared when the user taps
+  // anywhere outside the inventory table or invokes a row action.
+  const [tappedId, setTappedId] = useState<string | null>(null);
   const [household, setHousehold] = useState<HouseholdSummary | null>(null);
   const [welcomeProfile, setWelcomeProfile] = useState<WelcomeProfile | null>(null);
   const [householdLoadStatus, setHouseholdLoadStatus] = useState<HouseholdLoadStatus>("loading");
@@ -227,6 +258,27 @@ export default function Home() {
   useEffect(() => () => {
     if (toastTimer.current) window.clearTimeout(toastTimer.current);
   }, []);
+
+  // Close the mobile row-action menu whenever the user navigates to a
+  // different view — the tapped row belongs to the previous view.
+  useEffect(() => {
+    setTappedId(null);
+  }, [view]);
+
+  // Close the mobile row-action menu when the user taps anywhere outside
+  // the inventory list. A tap on a different row is handled by the row's
+  // own onTap (which switches the menu), so we only clear when the target
+  // is not inside an .inventory-table element.
+  useEffect(() => {
+    if (!tappedId) return;
+    const handleDocumentClick = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target && target.closest(".inventory-table")) return;
+      setTappedId(null);
+    };
+    document.addEventListener("click", handleDocumentClick);
+    return () => document.removeEventListener("click", handleDocumentClick);
+  }, [tappedId]);
 
   const apiAction = async (action: string, payload: Record<string, unknown> = {}) => {
     try {
@@ -292,11 +344,18 @@ export default function Home() {
   const finishItem = async (item: InventoryItem) => {
     const willRestock = item.basic && !shopping.some((entry) => entry.name.toLowerCase() === item.name.toLowerCase() && !entry.checked);
     if (await apiAction("finishInventory", { id: item.id })) {
+      setTappedId(null);
       notify(willRestock ? `${item.name} finished · added to shopping list` : `${item.name} marked as finished`);
     }
   };
 
-  const deleteItem = async (id: string) => { await apiAction("deleteInventory", { id }); };
+  const deleteItem = async (id: string) => {
+    setTappedId(null);
+    await apiAction("deleteInventory", { id });
+  };
+  // Toggle the mobile row-action menu. Tapping the same row again closes it;
+  // tapping a different row switches the menu to the new row.
+  const tapRow = (id: string) => setTappedId((current) => (current === id ? null : id));
   const toggleShopping = async (id: string) => { await apiAction("toggleShopping", { id }); };
   const removeShopping = async (id: string) => { await apiAction("deleteShopping", { id }); };
   const addShopping = async (name: string, category: Category = "Pantry", source: ShoppingListItem["source"] = "manual") => {
@@ -413,12 +472,12 @@ export default function Home() {
   };
 
   const renderView = () => {
-    if (view === "inventory") return <InventoryView inventory={filteredInventory} query={query} setQuery={setQuery} categoryFilter={categoryFilter} setCategoryFilter={setCategoryFilter} onAdd={() => setShowAdd(true)} onFinish={finishItem} onDelete={deleteItem} onEdit={setEditingInventoryItem} onEditExpiry={setEditingExpiryItem} />;
-    if (view === "expiring") return <ExpiringView items={expiring} onFinish={finishItem} onDelete={deleteItem} onAdd={() => setShowAdd(true)} onEdit={setEditingInventoryItem} onEditExpiry={setEditingExpiryItem} />;
+    if (view === "inventory") return <InventoryView inventory={filteredInventory} query={query} setQuery={setQuery} categoryFilter={categoryFilter} setCategoryFilter={setCategoryFilter} onAdd={() => setShowAdd(true)} onFinish={finishItem} onDelete={deleteItem} onEdit={setEditingInventoryItem} onEditExpiry={setEditingExpiryItem} tappedId={tappedId} onTapRow={tapRow} />;
+    if (view === "expiring") return <ExpiringView items={expiring} onFinish={finishItem} onDelete={deleteItem} onAdd={() => setShowAdd(true)} onEdit={setEditingInventoryItem} onEditExpiry={setEditingExpiryItem} tappedId={tappedId} onTapRow={tapRow} />;
     if (view === "shopping") return <ShoppingView shopping={shopping} onToggle={toggleShopping} onRemove={removeShopping} onAdd={(name) => addShopping(name)} />;
     if (view === "recipes") return <RecipesView mode={recipeMode} setMode={setRecipeMode} tagFilter={recipeTagFilter} setTagFilter={setRecipeTagFilter} typeFilter={recipeTypeFilter} setTypeFilter={setRecipeTypeFilter} recipes={recipeList} inventory={inventory} suggestedRecipe={suggestedRecipe} suggestionSource={suggestionSource} suggestionStatus={suggestionStatus} isSuggesting={isSuggestingRecipe} onSuggest={suggestOnlineRecipe} onOpen={setActiveRecipe} onOpenSuggestion={() => suggestedRecipe && setActiveRecipe(suggestedRecipe)} onSaveSuggestion={saveSuggestedRecipe} onEdit={setEditingRecipe} onDelete={deleteRecipe} onAddMissing={addMissing} onAdd={() => setShowRecipeForm(true)} />;
     if (view === "settings") return <SettingsView householdName={household?.name ?? "Your household"} memberCount={household?.memberCount} inventory={inventory} shopping={shopping} recipes={recipeList} householdFetch={householdFetch} notify={notify} />;
-    return <Dashboard inventory={inventory} expiring={expiring} basics={basics} shopping={shopping} recipes={recipeList} greeting={greeting} onAdd={() => setShowAdd(true)} onView={setView} onFinish={finishItem} onDelete={deleteItem} onRecipe={() => setView("recipes")} onAddShopping={(item) => addShopping(item.name, item.category, "inventory")} />;
+    return <Dashboard inventory={inventory} expiring={expiring} basics={basics} shopping={shopping} recipes={recipeList} greeting={greeting} onAdd={() => setShowAdd(true)} onView={setView} onFinish={finishItem} onDelete={deleteItem} onRecipe={() => setView("recipes")} onAddShopping={(item) => addShopping(item.name, item.category, "inventory")} tappedId={tappedId} onTapRow={tapRow} />;
   };
 
   if (!authLoaded || householdLoadStatus === "loading") {
@@ -452,7 +511,7 @@ export default function Home() {
   </main>;
 }
 
-function Dashboard({ inventory, expiring, basics, shopping, recipes: recipeList, greeting, onAdd, onView, onFinish, onDelete, onRecipe, onAddShopping }: { inventory: InventoryItem[]; expiring: InventoryItem[]; basics: InventoryItem[]; shopping: ShoppingListItem[]; recipes: Recipe[]; greeting: { dateLabel: string; greeting: string }; onAdd: () => void; onView: (view: View) => void; onFinish: (item: InventoryItem) => void; onDelete: (id: string) => void; onRecipe: () => void; onAddShopping: (item: InventoryItem) => void }) {
+function Dashboard({ inventory, expiring, basics, shopping, recipes: recipeList, greeting, onAdd, onView, onFinish, onDelete, onRecipe, onAddShopping, tappedId, onTapRow }: { inventory: InventoryItem[]; expiring: InventoryItem[]; basics: InventoryItem[]; shopping: ShoppingListItem[]; recipes: Recipe[]; greeting: { dateLabel: string; greeting: string }; onAdd: () => void; onView: (view: View) => void; onFinish: (item: InventoryItem) => void; onDelete: (id: string) => void; onRecipe: () => void; onAddShopping: (item: InventoryItem) => void; tappedId: string | null; onTapRow: (id: string) => void }) {
   const featuredRecipe = [...recipeList].sort((a, b) => {
     const expiringDifference = matchingIngredients(b, expiring).length - matchingIngredients(a, expiring).length;
     if (expiringDifference) return expiringDifference;
@@ -462,7 +521,7 @@ function Dashboard({ inventory, expiring, basics, shopping, recipes: recipeList,
   })[0];
   return <div className="dashboard"><div className="page-intro"><div><div className="eyebrow" suppressHydrationWarning>{greeting.dateLabel}</div><h1 suppressHydrationWarning>{greeting.greeting}<span className="title-dot">.</span></h1><p>Here&apos;s what needs your attention around the house.</p></div><button className="primary-button" onClick={onAdd}><span>＋</span> Add item</button></div>
     <div className="summary-grid"><SummaryCard label="At home" value={inventory.length} detail="items tracked" accent="sage" icon="⌂" /><SummaryCard label="Use soon" value={expiring.filter((item) => getExpiryStatus(item.expiry) !== "expired").length} detail="in the next 5 days" accent="amber" icon="◷" action={() => onView("expiring")} /><SummaryCard label="Expired" value={inventory.filter((item) => getExpiryStatus(item.expiry) === "expired").length} detail="needs attention" accent="coral" action={() => onView("expiring")} icon="!" /><SummaryCard label="To buy" value={shopping.filter((item) => !item.checked).length} detail="on your list" accent="blue" icon="✓" action={() => onView("shopping")} /></div>
-    <div className="dashboard-grid"><section className="panel next-expiry-panel"><PanelHeading eyebrow="Priority shelf" title="Next expiries" action="See all" onAction={() => onView("expiring")} /><div className="panel-note"><span className="pulse-dot" />A little nudge to use what&apos;s freshest first</div>{expiring.length ? <div className="item-list">{expiring.slice(0, 4).map((item) => <ItemRow key={item.id} item={item} onFinish={() => onFinish(item)} onDelete={() => onDelete(item.id)} onEditExpiry={() => onView("inventory")} />)}</div> : <EmptyState title="Nothing urgent" body="Your food is looking nicely under control." />}</section>
+    <div className="dashboard-grid"><section className="panel next-expiry-panel"><PanelHeading eyebrow="Priority shelf" title="Next expiries" action="See all" onAction={() => onView("expiring")} /><div className="panel-note"><span className="pulse-dot" />A little nudge to use what&apos;s freshest first</div>{expiring.length ? <div className="item-list">{expiring.slice(0, 4).map((item) => <ItemRow key={item.id} item={item} onFinish={() => onFinish(item)} onDelete={() => onDelete(item.id)} onEditExpiry={() => onView("inventory")} tapped={tappedId === item.id} onTap={() => onTapRow(item.id)} />)}</div> : <EmptyState title="Nothing urgent" body="Your food is looking nicely under control." />}</section>
       <section className="panel use-panel"><PanelHeading eyebrow="Cook tonight" title="Use what may go first" action="View recipes" onAction={onRecipe} />{featuredRecipe ? <div className="recipe-callout"><div className="recipe-illustration"><span>✦</span><i>✦</i><b>•</b></div><div><strong>{featuredRecipe.name}</strong><p>{featuredRecipe.description}</p><div className="recipe-foot"><span>{featuredRecipe.time}</span><span>{featuredRecipe.difficulty}</span><button onClick={onRecipe}>Open recipe <span>→</span></button></div></div></div> : <EmptyState title="No recipes yet" body="Your recipe shelf is ready for your own ideas." />}</section></div>
     <div className="lower-grid"><section className="panel basics-panel"><PanelHeading eyebrow="Keep stocked" title="Basics running low" action="View inventory" onAction={() => onView("inventory")} />{basics.length ? <div className="basic-list">{basics.slice(0, 4).map((item) => <div className="basic-row" key={item.id}><div className="basic-name"><span className="basic-icon">{item.category === "Bathroom" ? "◒" : item.category === "Cleaning" ? "✧" : "□"}</span><div><strong>{item.name}</strong><span>{item.quantity} {item.unit} left</span></div></div><button onClick={() => onAddShopping(item)}>Add to list <span>＋</span></button></div>)}</div> : <EmptyState title="All stocked" body="Your basics are in good shape." />}</section>
       <section className="panel shopping-snapshot"><PanelHeading eyebrow="While you&apos;re out" title="Shopping list" action="Open list" onAction={() => onView("shopping")} /><div className="shopping-progress"><div><strong>{shopping.filter((item) => item.checked).length}</strong><span>of {shopping.length} picked up</span></div><div className="progress-track"><span style={{ width: `${shopping.length ? (shopping.filter((item) => item.checked).length / shopping.length) * 100 : 0}%` }} /></div></div><div className="snapshot-items">{shopping.filter((item) => !item.checked).slice(0, 3).map((item) => <div key={item.id}><span className="unchecked" />{item.name}<small>{item.quantity}</small></div>)}</div></section></div>
@@ -472,11 +531,11 @@ function Dashboard({ inventory, expiring, basics, shopping, recipes: recipeList,
 function SummaryCard({ label, value, detail, accent, icon, action }: { label: string; value: number; detail: string; accent: string; icon: string; action?: () => void }) { return <button className={`summary-card ${accent}`} onClick={action}><div className="summary-top"><span>{label}</span><b>{icon}</b></div><strong>{value}</strong><small>{detail}</small>{action && <span className="summary-arrow">→</span>}</button>; }
 function PanelHeading({ eyebrow, title, action, onAction }: { eyebrow: string; title: string; action?: string; onAction?: () => void }) { return <div className="panel-heading"><div><div className="eyebrow">{eyebrow}</div><h2>{title}</h2></div>{action && <button onClick={onAction}>{action} <span>→</span></button>}</div>; }
 
-function InventoryView({ inventory, query, setQuery, categoryFilter, setCategoryFilter, onAdd, onFinish, onDelete, onEdit, onEditExpiry }: { inventory: InventoryItem[]; query: string; setQuery: (value: string) => void; categoryFilter: "All" | Category; setCategoryFilter: (value: "All" | Category) => void; onAdd: () => void; onFinish: (item: InventoryItem) => void; onDelete: (id: string) => void; onEdit: (item: InventoryItem) => void; onEditExpiry: (item: InventoryItem) => void }) {
-  return <div className="list-view"><div className="page-intro"><div><div className="eyebrow">Everything under your roof</div><h1>Inventory</h1><p>Keep a simple, current picture of what you have.</p></div><button className="primary-button" onClick={onAdd}>＋ Add item</button></div><div className="toolbar"><label className="search-field"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search your home" /></label><select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value as "All" | Category)}><option>All</option>{categories.map((category) => <option key={category}>{category}</option>)}</select></div><div className="inventory-table"><div className="table-head"><span>Item</span><span>Category &amp; place</span><span>Expiry</span><span>Actions</span></div>{inventory.length ? inventory.map((item) => <ItemRow key={item.id} item={item} onFinish={() => onFinish(item)} onDelete={() => onDelete(item.id)} onEdit={() => onEdit(item)} onEditExpiry={() => onEditExpiry(item)} />) : <EmptyState title="No items found" body="Try another search or add something new." action={<button className="secondary-button" onClick={onAdd}>Add an item</button>} />}</div></div>;
+function InventoryView({ inventory, query, setQuery, categoryFilter, setCategoryFilter, onAdd, onFinish, onDelete, onEdit, onEditExpiry, tappedId, onTapRow }: { inventory: InventoryItem[]; query: string; setQuery: (value: string) => void; categoryFilter: "All" | Category; setCategoryFilter: (value: "All" | Category) => void; onAdd: () => void; onFinish: (item: InventoryItem) => void; onDelete: (id: string) => void; onEdit: (item: InventoryItem) => void; onEditExpiry: (item: InventoryItem) => void; tappedId: string | null; onTapRow: (id: string) => void }) {
+  return <div className="list-view"><div className="page-intro"><div><div className="eyebrow">Everything under your roof</div><h1>Inventory</h1><p>Keep a simple, current picture of what you have.</p></div><button className="primary-button" onClick={onAdd}>＋ Add item</button></div><div className="toolbar"><label className="search-field"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search your home" /></label><select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value as "All" | Category)}><option>All</option>{categories.map((category) => <option key={category}>{category}</option>)}</select></div><div className="inventory-table"><div className="table-head"><span>Item</span><span>Category &amp; place</span><span>Expiry</span><span>Actions</span></div>{inventory.length ? inventory.map((item) => <ItemRow key={item.id} item={item} onFinish={() => onFinish(item)} onDelete={() => onDelete(item.id)} onEdit={() => onEdit(item)} onEditExpiry={() => onEditExpiry(item)} tapped={tappedId === item.id} onTap={() => onTapRow(item.id)} />) : <EmptyState title="No items found" body="Try another search or add something new." action={<button className="secondary-button" onClick={onAdd}>Add an item</button>} />}</div></div>;
 }
 
-function ExpiringView({ items, onFinish, onDelete, onAdd, onEdit, onEditExpiry }: { items: InventoryItem[]; onFinish: (item: InventoryItem) => void; onDelete: (id: string) => void; onAdd: () => void; onEdit: (item: InventoryItem) => void; onEditExpiry: (item: InventoryItem) => void }) { return <div className="list-view"><div className="page-intro"><div><div className="eyebrow">A little attention goes a long way</div><h1>Expiring soon</h1><p>Use these first to keep waste low and meals easy.</p></div><button className="primary-button" onClick={onAdd}>＋ Add item</button></div><div className="expiry-callout"><span className="callout-icon">◷</span><div><strong>{items.length ? `${items.length} items need a look` : "You’re all clear"}</strong><span>{items.some((item) => getExpiryStatus(item.expiry) === "expired") ? "Some items have already passed their date." : "No expired food in sight — nice work."}</span></div></div><div className="inventory-table"><div className="table-head"><span>Item</span><span>Category &amp; place</span><span>Expiry</span><span>Actions</span></div>{items.length ? items.map((item) => <ItemRow key={item.id} item={item} onFinish={() => onFinish(item)} onDelete={() => onDelete(item.id)} onEdit={() => onEdit(item)} onEditExpiry={() => onEditExpiry(item)} />) : <EmptyState title="Nothing expiring soon" body="Your next few days are looking good." />}</div></div>; }
+function ExpiringView({ items, onFinish, onDelete, onAdd, onEdit, onEditExpiry, tappedId, onTapRow }: { items: InventoryItem[]; onFinish: (item: InventoryItem) => void; onDelete: (id: string) => void; onAdd: () => void; onEdit: (item: InventoryItem) => void; onEditExpiry: (item: InventoryItem) => void; tappedId: string | null; onTapRow: (id: string) => void }) { return <div className="list-view"><div className="page-intro"><div><div className="eyebrow">A little attention goes a long way</div><h1>Expiring soon</h1><p>Use these first to keep waste low and meals easy.</p></div><button className="primary-button" onClick={onAdd}>＋ Add item</button></div><div className="expiry-callout"><span className="callout-icon">◷</span><div><strong>{items.length ? `${items.length} items need a look` : "You’re all clear"}</strong><span>{items.some((item) => getExpiryStatus(item.expiry) === "expired") ? "Some items have already passed their date." : "No expired food in sight — nice work."}</span></div></div><div className="inventory-table"><div className="table-head"><span>Item</span><span>Category &amp; place</span><span>Expiry</span><span>Actions</span></div>{items.length ? items.map((item) => <ItemRow key={item.id} item={item} onFinish={() => onFinish(item)} onDelete={() => onDelete(item.id)} onEdit={() => onEdit(item)} onEditExpiry={() => onEditExpiry(item)} tapped={tappedId === item.id} onTap={() => onTapRow(item.id)} />) : <EmptyState title="Nothing expiring soon" body="Your next few days are looking good." />}</div></div>; }
 
 function ShoppingView({ shopping, onToggle, onRemove, onAdd }: { shopping: ShoppingListItem[]; onToggle: (id: string) => void; onRemove: (id: string) => void; onAdd: (name: string) => Promise<boolean> }) { const [newItem, setNewItem] = useState(""); const [isAdding, setIsAdding] = useState(false); const open = shopping.filter((item) => !item.checked); const done = shopping.filter((item) => item.checked); return <div className="list-view shopping-view"><div className="page-intro"><div><div className="eyebrow">Ready when you are</div><h1>Shopping list</h1><p>One clear list for the next trip to the store.</p></div><div className="shopping-count"><strong>{open.length}</strong><span>left to buy</span></div></div><form className="add-list-form" onSubmit={async (event) => { event.preventDefault(); if (!newItem.trim() || isAdding) return; setIsAdding(true); if (await onAdd(newItem)) setNewItem(""); setIsAdding(false); }}><span>＋</span><input value={newItem} onChange={(event) => setNewItem(event.target.value)} placeholder="Add something to the list..." /><button type="submit" disabled={isAdding}>{isAdding ? "Adding..." : "Add"}</button></form><div className="shopping-columns"><section className="shopping-card"><div className="shopping-card-heading"><h2>To buy <span>{open.length}</span></h2><span>Tap to check off</span></div>{open.length ? open.map((item) => <ShoppingRow key={item.id} item={item} onToggle={() => onToggle(item.id)} onRemove={() => onRemove(item.id)} />) : <EmptyState title="List is clear" body="Add something before your next shop." />}</section><section className="shopping-card completed-card"><div className="shopping-card-heading"><h2>Picked up <span>{done.length}</span></h2><span>Done</span></div>{done.length ? done.map((item) => <ShoppingRow key={item.id} item={item} onToggle={() => onToggle(item.id)} onRemove={() => onRemove(item.id)} />) : <p className="muted-copy">Checked items will appear here.</p>}</section></div></div>; }
 function ShoppingRow({ item, onToggle, onRemove }: { item: ShoppingListItem; onToggle: () => void; onRemove: () => void }) { return <div className={`shopping-row ${item.checked ? "checked" : ""}`}><button className="check-box" onClick={onToggle} aria-label={item.checked ? `Uncheck ${item.name}` : `Check ${item.name}`}>{item.checked ? "✓" : ""}</button><div><strong>{item.name}</strong><span>{item.quantity} · {item.category}{item.source !== "manual" && <em>{item.source === "recipe" ? "From recipe" : "Restock"}</em>}</span></div><IconButton label={`Remove ${item.name}`} onClick={onRemove}>×</IconButton></div>; }
